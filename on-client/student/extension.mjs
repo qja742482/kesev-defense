@@ -2,7 +2,32 @@
 // 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
 export function createStudentView() {
   return {
-    renderIdentity() { return '학생 구현 대기: 실제 로그인·기기·세션 정보를 연결하세요.'; },
+    renderIdentity(data) {
+      if (!data) {
+        return '로그인 정보 없음';
+      }
+
+      const { user, device, session, status, mode, error } = data;
+
+      if (error || status === 'error' || mode === 'error') {
+        const errorMsg = error?.message || error || '알 수 없는 오류 발생';
+        return `[오류] 상태: ${status || 'error'} - ${errorMsg}`;
+      }
+
+      if (status === 'unknown' || mode === 'unknown' || status === 'unconfirmed') {
+        return `[확인 불가] 세션 상태를 확인할 수 없습니다.`;
+      }
+
+      if (!user && !device && !session) {
+        return '로그인 정보 없음';
+      }
+
+      const userName = user?.name || user?.username || user || '알 수 없음';
+      const deviceName = device?.name || device?.model || device || '연결된 기기 없음';
+      const sessionInfo = session?.id || session?.token || session || '세션 정보 없음';
+
+      return `사용자: ${userName} | 기기: ${deviceName} | 세션: ${sessionInfo}`;
+    },
     renderDecision() { return '학생 구현 대기: 서버의 판정과 이유를 연결하세요.'; },
     renderEvents() { return '학생 구현 대기: 본인 접속·XDR 기록을 연결하세요.'; },
     renderStatus() { return '학생 구현 대기: 기기·세션·알림과 연결 점검 상태를 구분하세요.'; },
