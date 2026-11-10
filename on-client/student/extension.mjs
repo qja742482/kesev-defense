@@ -1,32 +1,68 @@
-// 이 파일은 학생이 같은 프로젝트에서 이어서 구현합니다.
-// 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
 export function createStudentView() {
   return {
-    renderIdentity(data) {
-      if (!data) {
-        return '로그인 정보 없음';
+    renderIdentity({ me, devices, sessions } = {}) {
+      const container = document.createElement('div');
+
+      const status = me?.status;
+      const mode = me?.mode;
+      const data = me?.data;
+      const error = me?.error;
+
+      let modeText = '';
+      if (mode === 'demo') modeText = '예제 자료';
+      else if (mode === 'disconnected') modeText = '연결 없음';
+      else if (mode === 'unknown') modeText = '확인 불가';
+
+      if (status === 'loading') {
+        container.textContent = modeText ? `불러오는 중 (${modeText})` : '불러오는 중';
+        return container;
       }
 
-      const { user, device, session, status, mode, error } = data;
-
-      if (error || status === 'error' || mode === 'error') {
+      if (status === 'error' || error) {
         const errorMsg = error?.message || error || '알 수 없는 오류 발생';
-        return `[오류] 상태: ${status || 'error'} - ${errorMsg}`;
+        const prefix = modeText ? `연결 실패 (${modeText}): ` : '연결 실패: ';
+        container.textContent = prefix + errorMsg;
+        return container;
       }
 
-      if (status === 'unknown' || mode === 'unknown' || status === 'unconfirmed') {
-        return `[확인 불가] 세션 상태를 확인할 수 없습니다.`;
+      if (mode === 'disconnected' && !data) {
+        container.textContent = '연결 없음';
+        return container;
+      }
+      if (mode === 'unknown' && !data) {
+        container.textContent = '확인 불가';
+        return container;
       }
 
-      if (!user && !device && !session) {
-        return '로그인 정보 없음';
+      if (data && data.user) {
+        const userName = data.user.label || data.user.id || '알 수 없음';
+        
+        const deviceObj = data.device || {};
+        const deviceName = deviceObj.label || deviceObj.id || '기기 없음';
+        const deviceStatusRaw = deviceObj.status;
+        let deviceStatusStr = '확인 불가';
+        if (deviceStatusRaw === 'compliant') deviceStatusStr = '보안 기준 충족';
+        else if (deviceStatusRaw === 'noncompliant') deviceStatusStr = '보안 기준 미충족';
+        else if (deviceStatusRaw === 'unknown') deviceStatusStr = '확인 불가';
+
+        const sessionObj = data.session || {};
+        const sessionStatusRaw = sessionObj.status;
+        let sessionStatusStr = '확인 불가';
+        if (sessionStatusRaw === 'active') sessionStatusStr = '활성';
+        else if (sessionStatusRaw === 'expired') sessionStatusStr = '만료';
+        else if (sessionStatusRaw === 'revoked') sessionStatusStr = '철회됨';
+        else if (sessionStatusRaw === 'unknown') sessionStatusStr = '확인 불가';
+
+        let displayText = `사용자: ${userName} | 기기: ${deviceName} (${deviceStatusStr}) | 세션: ${sessionStatusStr}`;
+        if (modeText) {
+          displayText += ` [${modeText}]`;
+        }
+        container.textContent = displayText;
+        return container;
       }
 
-      const userName = user?.name || user?.username || user || '알 수 없음';
-      const deviceName = device?.name || device?.model || device || '연결된 기기 없음';
-      const sessionInfo = session?.id || session?.token || session || '세션 정보 없음';
-
-      return `사용자: ${userName} | 기기: ${deviceName} | 세션: ${sessionInfo}`;
+      container.textContent = modeText ? `로그인 정보 없음 (${modeText})` : '로그인 정보 없음';
+      return container;
     },
     renderDecision() { return '학생 구현 대기: 서버의 판정과 이유를 연결하세요.'; },
     renderEvents() { return '학생 구현 대기: 본인 접속·XDR 기록을 연결하세요.'; },
