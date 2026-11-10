@@ -3,37 +3,47 @@ export function createStudentView() {
     renderIdentity({ me, devices, sessions } = {}) {
       const container = document.createElement('div');
 
-      const status = me?.status;
-      const mode = me?.mode;
-      const data = me?.data;
-      const error = me?.error;
+      const mStatus = me?.status;
+      const dStatus = devices?.status;
+      const sStatus = sessions?.status;
+
+      const mError = me?.error;
+      const dError = devices?.error;
+      const sError = sessions?.error;
+      const error = mError || dError || sError;
+
+      const mode = me?.mode || devices?.mode || sessions?.mode;
 
       let modeText = '';
       if (mode === 'demo') modeText = '예제 자료';
       else if (mode === 'disconnected') modeText = '연결 없음';
       else if (mode === 'unknown') modeText = '확인 불가';
 
-      if (status === 'loading') {
+      // 1. me, devices, sessions 중 하나라도 loading 상태인 경우
+      if (mStatus === 'loading' || dStatus === 'loading' || sStatus === 'loading') {
         container.textContent = modeText ? `불러오는 중 (${modeText})` : '불러오는 중';
         return container;
       }
 
-      if (status === 'error' || error) {
-        const errorMsg = error?.message || error || '알 수 없는 오류 발생';
+      // 2. me, devices, sessions 중 하나라도 error 상태이거나 에러가 있는 경우
+      if (mStatus === 'error' || dStatus === 'error' || sStatus === 'error' || error) {
+        const errObj = mError || dError || sError || error;
+        const errorMsg = errObj?.message || errObj || '알 수 없는 오류 발생';
         const prefix = modeText ? `연결 실패 (${modeText}): ` : '연결 실패: ';
         container.textContent = prefix + errorMsg;
         return container;
       }
 
-      if (mode === 'disconnected' && !data) {
+      if (mode === 'disconnected' && !me?.data) {
         container.textContent = '연결 없음';
         return container;
       }
-      if (mode === 'unknown' && !data) {
+      if (mode === 'unknown' && !me?.data) {
         container.textContent = '확인 불가';
         return container;
       }
 
+      const data = me?.data;
       if (data && data.user) {
         const userName = data.user.label || data.user.id || '알 수 없음';
         
