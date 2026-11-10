@@ -39,21 +39,23 @@ export function createStudentView() {
         
         const deviceObj = data.device || {};
         const deviceName = deviceObj.label || deviceObj.id || '기기 없음';
-        const deviceStatusRaw = deviceObj.status;
-        let deviceStatusStr = '확인 불가';
-        if (deviceStatusRaw === 'compliant') deviceStatusStr = '보안 기준 충족';
-        else if (deviceStatusRaw === 'noncompliant') deviceStatusStr = '보안 기준 미충족';
-        else if (deviceStatusRaw === 'unknown') deviceStatusStr = '확인 불가';
+        const deviceStatusRaw = deviceObj.status || 'unknown';
+        let deviceStatusText = '확인 불가';
+        if (deviceStatusRaw === 'compliant') deviceStatusText = '보안 기준 충족';
+        else if (deviceStatusRaw === 'noncompliant') deviceStatusText = '보안 기준 미충족';
+        else if (deviceStatusRaw === 'unknown') deviceStatusText = '확인 불가';
+        const deviceDisplay = `${deviceStatusText} (${deviceStatusRaw})`;
 
         const sessionObj = data.session || {};
-        const sessionStatusRaw = sessionObj.status;
-        let sessionStatusStr = '확인 불가';
-        if (sessionStatusRaw === 'active') sessionStatusStr = '활성';
-        else if (sessionStatusRaw === 'expired') sessionStatusStr = '만료';
-        else if (sessionStatusRaw === 'revoked') sessionStatusStr = '철회됨';
-        else if (sessionStatusRaw === 'unknown') sessionStatusStr = '확인 불가';
+        const sessionStatusRaw = sessionObj.status || 'unknown';
+        let sessionStatusText = '확인 불가';
+        if (sessionStatusRaw === 'active') sessionStatusText = '활성';
+        else if (sessionStatusRaw === 'expired') sessionStatusText = '만료';
+        else if (sessionStatusRaw === 'revoked') sessionStatusText = '철회됨';
+        else if (sessionStatusRaw === 'unknown') sessionStatusText = '확인 불가';
+        const sessionDisplay = `${sessionStatusText} (${sessionStatusRaw})`;
 
-        let displayText = `사용자: ${userName} | 기기: ${deviceName} (${deviceStatusStr}) | 세션: ${sessionStatusStr}`;
+        let displayText = `사용자: ${userName} | 기기: ${deviceName} (${deviceDisplay}) | 세션: ${sessionDisplay}`;
         if (modeText) {
           displayText += ` [${modeText}]`;
         }
