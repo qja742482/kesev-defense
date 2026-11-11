@@ -1,4 +1,4 @@
-export function createStudentView() {
+﻿export function createStudentView() {
   return {
     renderIdentity({ me, devices, sessions } = {}) {
       const container = document.createElement('div');
@@ -20,14 +20,14 @@ export function createStudentView() {
       else if (mode === 'unknown') modeText = '확인 불가';
 
       if (mStatus === 'loading' || dStatus === 'loading' || sStatus === 'loading') {
-        container.textContent = modeText ? `불러오는 중 (${modeText})` : '불러오는 중';
+        container.textContent = modeText ? 불러오는 중 () : '불러오는 중';
         return container;
       }
 
       if (mStatus === 'error' || dStatus === 'error' || sStatus === 'error' || error) {
         const errObj = mError || dError || sError || error;
         const errorMsg = errObj?.message || errObj || '알 수 없는 오류 발생';
-        const prefix = modeText ? `연결 실패 (${modeText}): ` : '연결 실패: ';
+        const prefix = modeText ? 연결 실패 ():  : '연결 실패: ';
         container.textContent = prefix + errorMsg;
         return container;
       }
@@ -52,7 +52,7 @@ export function createStudentView() {
         if (deviceStatusRaw === 'compliant') deviceStatusText = '보안 기준 충족';
         else if (deviceStatusRaw === 'noncompliant') deviceStatusText = '보안 기준 미충족';
         else if (deviceStatusRaw === 'unknown') deviceStatusText = '확인 불가';
-        const deviceDisplay = `${deviceStatusText} (${deviceStatusRaw})`;
+        const deviceDisplay = ${deviceStatusText} ();
 
         const sessionObj = data.session || {};
         const sessionStatusRaw = sessionObj.status || 'unknown';
@@ -61,17 +61,17 @@ export function createStudentView() {
         else if (sessionStatusRaw === 'expired') sessionStatusText = '만료';
         else if (sessionStatusRaw === 'revoked') sessionStatusText = '철회됨';
         else if (sessionStatusRaw === 'unknown') sessionStatusText = '확인 불가';
-        const sessionDisplay = `${sessionStatusText} (${sessionStatusRaw})`;
+        const sessionDisplay = ${sessionStatusText} ();
 
-        let displayText = `사용자: ${userName} | 기기: ${deviceName} (${deviceDisplay}) | 세션: ${sessionDisplay}`;
+        let displayText = 사용자:  | 기기:  () | 세션: ;
         if (modeText) {
-          displayText += ` [${modeText}]`;
+          displayText +=  [];
         }
         container.textContent = displayText;
         return container;
       }
 
-      container.textContent = modeText ? `로그인 정보 없음 (${modeText})` : '로그인 정보 없음';
+      container.textContent = modeText ? 로그인 정보 없음 () : '로그인 정보 없음';
       return container;
     },
     renderDecision({ status, data, error, appId } = {}) {
@@ -94,7 +94,7 @@ export function createStudentView() {
         const message = typeof error?.message === 'string' && error.message
           ? error.message
           : '오류 메시지를 확인할 수 없습니다.';
-        addLine(`요청 실패: ${message}`);
+        addLine(요청 실패: );
         addLine('요청 실패는 접근 거부 판정이 아닙니다.');
         return container;
       }
@@ -104,7 +104,7 @@ export function createStudentView() {
       }
 
       const app = typeof data?.appId === 'string' ? data.appId : appId;
-      if (typeof app === 'string' && app) addLine(`업무 앱: ${app}`);
+      if (typeof app === 'string' && app) addLine(업무 앱: );
 
       const decision = data?.decision;
       const decisionLabels = {
@@ -114,17 +114,17 @@ export function createStudentView() {
         unknown: '확인 불가(unknown)',
       };
       if (typeof decision === 'string' && Object.hasOwn(decisionLabels, decision)) {
-        addLine(`접근 판정: ${decisionLabels[decision]}`);
+        addLine(접근 판정: );
         if (decision === 'challenge') {
           addLine('이 앱이 추가 인증 또는 확인 절차를 대신 수행하지 않습니다.');
         }
       } else {
         const originalCode = typeof decision === 'string' && decision ? decision : '값 없음';
-        addLine(`접근 판정: 확인 불가(unknown) · 원래 판정 코드: ${originalCode}`);
+        addLine(접근 판정: 확인 불가(unknown) · 원래 판정 코드: );
       }
 
-      addLine(`판정 이유: ${typeof data?.reason === 'string' ? data.reason : '확인 불가'}`);
-      addLine(`판정 시각: ${typeof data?.checkedAt === 'string' ? data.checkedAt : '확인 불가'}`);
+      addLine(판정 이유: );
+      addLine(판정 시각: );
       return container;
     },
     renderEvents({ status, mode, data, error } = {}) {
@@ -132,7 +132,7 @@ export function createStudentView() {
 
       if (status === 'error') {
         const msg = error?.message || '알 수 없는 오류';
-        container.textContent = `기록을 불러오지 못했습니다: ${msg}`;
+        container.textContent = 기록을 불러오지 못했습니다: ;
         return container;
       }
 
@@ -249,12 +249,12 @@ export function createStudentView() {
           const appText = item.appId ? item.appId : '앱을 확인할 수 없음';
           
           const summaryText = document.createElement('span');
-          summaryText.textContent = `[${kindText}] 시각: ${item.at} | 앱: ${appText} | 요약: ${item.summary || ''}`;
+          summaryText.textContent = [] 시각:  | 앱:  | 요약: ;
           row.append(summaryText);
 
           const detailBtn = document.createElement('button');
-          detailBtn.textContent = `${item.id} 상세`;
-          detailBtn.setAttribute('aria-label', `${item.id} 상세`);
+          detailBtn.textContent = ${item.id} 상세;
+          detailBtn.setAttribute('aria-label', ${item.id} 상세);
           detailBtn.style.marginLeft = '10px';
           detailBtn.addEventListener('click', () => {
             container._selectedDetailId = container._selectedDetailId === item.id ? null : item.id;
@@ -275,19 +275,19 @@ export function createStudentView() {
               detailDiv.append(p);
             };
 
-            addDetailLine(`사건 ID: ${item.id}`);
-            addDetailLine(`업무 앱(appId): ${appText}`);
+            addDetailLine(사건 ID: );
+            addDetailLine(업무 앱(appId): );
 
             if (Array.isArray(item.evidence) && item.evidence.length > 0) {
               addDetailLine('근거 (Evidence):');
-              item.evidence.forEach(ev => addDetailLine(` - [${ev.id}] ${ev.text}`));
+              item.evidence.forEach(ev => addDetailLine( - [] ));
             } else {
               addDetailLine('근거 (Evidence): 없음');
             }
 
             if (Array.isArray(item.rules) && item.rules.length > 0) {
               addDetailLine('규칙 (Rules):');
-              item.rules.forEach(rule => addDetailLine(` - [${rule.id}] ${rule.text}`));
+              item.rules.forEach(rule => addDetailLine( - [] ));
             } else {
               addDetailLine('규칙 (Rules): 없음');
             }
@@ -300,28 +300,27 @@ export function createStudentView() {
             let accessText = accessVal;
             if (accessVal === 'allowed') accessText = '허용 (allowed)';
             else if (accessVal === 'denied') accessText = '거부 (denied)';
-            else accessText = `확인 불가 (${accessVal})`;
+            else accessText = 확인 불가 ();
 
             let sessionText = sessionVal;
             if (sessionVal === 'active') sessionText = '활성 (active)';
             else if (sessionVal === 'expired') sessionText = '만료 (expired)';
             else if (sessionVal === 'revoked') sessionText = '철회됨 (revoked)';
-            else sessionText = `확인 불가 (${sessionVal})`;
+            else sessionText = 확인 불가 ();
 
             let deviceText = deviceVal;
             if (deviceVal === 'compliant') deviceText = '보안 기준 충족 (compliant)';
             else if (deviceVal === 'noncompliant') deviceText = '보안 기준 미충족 (noncompliant)';
-            else deviceText = `확인 불가 (${deviceVal})`;
+            else deviceText = 확인 불가 ();
 
-            addDetailLine(`상태 - 접속(access): ${accessText}`);
-            addDetailLine(`상태 - 세션(session): ${sessionText}`);
-            addDetailLine(`상태 - 기기(device): ${deviceText}`);
+            addDetailLine(상태 - 접속(access): );
+            addDetailLine(상태 - 세션(session): );
+            addDetailLine(상태 - 기기(device): );
 
-            // 16단계: 미지원 조치 버튼 (supportedActions가 있는 경우에만 표시)
             if (Array.isArray(item.supportedActions) && item.supportedActions.length > 0) {
               item.supportedActions.forEach((action) => {
                 const actionBtn = document.createElement('button');
-                actionBtn.textContent = `${action} 미지원`;
+                actionBtn.textContent = ${action} 미지원;
                 actionBtn.disabled = true;
                 actionBtn.style.marginTop = '5px';
                 actionBtn.style.display = 'block';
@@ -359,7 +358,6 @@ export function createStudentView() {
         container.append(h);
       };
 
-      // 1. 기기(devices) 상태 표시
       addSectionTitle('[등록 기기 정보]');
       const dStatus = devices?.status;
       if (dStatus === 'loading') {
@@ -371,8 +369,8 @@ export function createStudentView() {
         const isTimeout = errMsg.includes('timeout') || errMsg.includes('초과');
         const p = document.createElement('p');
         p.textContent = isTimeout 
-          ? `기기 정보 조회 시간 초과: ${errMsg}. 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.` 
-          : `기기 정보를 불러오지 못했습니다: ${errMsg}. 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.`;
+          ? 기기 정보 조회 시간 초과: . 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요. 
+          : 기기 정보를 불러오지 못했습니다: . 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.;
         container.append(p);
       } else if (dStatus === 'ok') {
         const dData = devices?.data;
@@ -385,7 +383,7 @@ export function createStudentView() {
             const p = document.createElement('p');
             const devLabel = dev.label || dev.id || '알 수 없는 기기';
             const devStatus = dev.status || 'unknown';
-            p.textContent = `기기: ${devLabel} | 상태: ${devStatus}`;
+            p.textContent = 기기:  | 상태: ;
             container.append(p);
           });
         }
@@ -395,7 +393,6 @@ export function createStudentView() {
         container.append(p);
       }
 
-      // 2. 세션(sessions) 상태 표시 (검증된 연결 하나 대상)
       addSectionTitle('[현재 검증된 세션 정보]');
       const sStatus = sessions?.status;
       if (sStatus === 'loading') {
@@ -407,8 +404,8 @@ export function createStudentView() {
         const isTimeout = errMsg.includes('timeout') || errMsg.includes('초과');
         const p = document.createElement('p');
         p.textContent = isTimeout 
-          ? `세션 정보 조회 시간 초과: ${errMsg}. 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.` 
-          : `세션 정보를 불러오지 못했습니다: ${errMsg}. 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.`;
+          ? 세션 정보 조회 시간 초과: . 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요. 
+          : 세션 정보를 불러오지 못했습니다: . 다시 시도는 위쪽 다시 불러오기 버튼을 직접 누르세요.;
         container.append(p);
       } else if (sStatus === 'ok') {
         const sData = sessions?.data;
@@ -421,7 +418,7 @@ export function createStudentView() {
           const p = document.createElement('p');
           const sId = sessionItem.id || '알 수 없음';
           const sState = sessionItem.status || 'unknown';
-          p.textContent = `세션 ID: ${sId} | 상태: ${sState} (현재 검증된 연결 하나)`;
+          p.textContent = 세션 ID:  | 상태:  (현재 검증된 연결 하나);
           container.append(p);
         }
       } else {
@@ -430,7 +427,6 @@ export function createStudentView() {
         container.append(p);
       }
 
-      // 3. 알림(notifications) 상태 표시
       addSectionTitle('[보안 알림]');
       if (!Array.isArray(notifications) || notifications.length === 0) {
         const p = document.createElement('p');
@@ -442,12 +438,11 @@ export function createStudentView() {
           const res = notif.resource || '알 수 없는 자원';
           const code = notif.code || 'N/A';
           const msg = notif.message || '';
-          p.textContent = `[자원: ${res}] 코드: ${code} - ${msg}`;
+          p.textContent = [자원: ] 코드:  - ;
           container.append(p);
         });
       }
 
-      // 4. 진단 정보(diagnostics) 및 도움정보 복사 버튼
       addSectionTitle('[진단 정보 및 도움 요청]');
       const diag = diagnostics;
       if (diag && diag.status === 'ok') {
@@ -459,7 +454,7 @@ export function createStudentView() {
         const engineMode = dInfo.engine?.mode || dInfo.engineMode || 'N/A';
         const engineCode = dInfo.engine?.code || dInfo.engineCode || 'N/A';
 
-        const diagText = `RequestId: ${reqId} | Component: ${comp} | Version: ${ver} | CheckedAt: ${checkedAt} | EngineMode: ${engineMode} | EngineCode: ${engineCode}`;
+        const diagText = RequestId:  | Component:  | Version:  | CheckedAt:  | EngineMode:  | EngineCode: ;
         
         const diagP = document.createElement('p');
         diagP.textContent = diagText;
