@@ -148,7 +148,6 @@ export function createStudentView() {
         return container;
       }
 
-      // 필터 상태 유지용 객체 (함수 외부 scope나 컨테이너에 바인딩)
       if (!container._filterState) {
         container._filterState = { kind: 'all', appId: 'all', access: 'all' };
       }
@@ -157,14 +156,11 @@ export function createStudentView() {
       }
 
       const renderUI = () => {
-        // 기존 내용 비우기
         container.replaceChildren();
 
-        // 1. 필터 영역 생성
         const filterWrapper = document.createElement('div');
         filterWrapper.style.marginBottom = '10px';
 
-        // 종류 필터
         const kindLabel = document.createElement('label');
         kindLabel.textContent = '기록 종류: ';
         const kindSelect = document.createElement('select');
@@ -183,7 +179,6 @@ export function createStudentView() {
         kindLabel.append(kindSelect);
         filterWrapper.append(kindLabel);
 
-        // 업무 앱 필터 (유니크 앱 ID 추출)
         const appSet = new Set();
         data.forEach((item) => { if (item.appId) appSet.add(item.appId); });
         const appList = Array.from(appSet);
@@ -210,7 +205,6 @@ export function createStudentView() {
         appLabel.append(appSelect);
         filterWrapper.append(appLabel);
 
-        // 접속 상태 필터
         const accessLabel = document.createElement('label');
         accessLabel.textContent = ' 접속 상태: ';
         const accessSelect = document.createElement('select');
@@ -231,7 +225,6 @@ export function createStudentView() {
 
         container.append(filterWrapper);
 
-        // 2. 필터링 및 정렬 (at 기준 최신순)
         const sortedData = [...data].sort((a, b) => new Date(b.at) - new Date(a.at));
         const filteredData = sortedData.filter((item) => {
           if (container._filterState.kind !== 'all' && item.kind !== container._filterState.kind) return false;
@@ -248,7 +241,6 @@ export function createStudentView() {
           return;
         }
 
-        // 3. 목록 렌더링
         filteredData.forEach((item) => {
           const row = document.createElement('div');
           row.setAttribute('data-student-event-id', item.id);
@@ -272,7 +264,6 @@ export function createStudentView() {
           });
           row.append(detailBtn);
 
-          // 상세 보기 영역
           if (container._selectedDetailId === item.id) {
             const detailDiv = document.createElement('div');
             detailDiv.setAttribute('data-student-event-detail', item.id);
@@ -289,7 +280,6 @@ export function createStudentView() {
             addDetailLine(`사건 ID: ${item.id}`);
             addDetailLine(`업무 앱(appId): ${appText}`);
 
-            // Evidence
             if (Array.isArray(item.evidence) && item.evidence.length > 0) {
               addDetailLine('근거 (Evidence):');
               item.evidence.forEach(ev => addDetailLine(` - [${ev.id}] ${ev.text}`));
@@ -297,7 +287,6 @@ export function createStudentView() {
               addDetailLine('근거 (Evidence): 없음');
             }
 
-            // Rules
             if (Array.isArray(item.rules) && item.rules.length > 0) {
               addDetailLine('규칙 (Rules):');
               item.rules.forEach(rule => addDetailLine(` - [${rule.id}] ${rule.text}`));
@@ -305,11 +294,16 @@ export function createStudentView() {
               addDetailLine('규칙 (Rules): 없음');
             }
 
-            // State (access, session, device)
             const st = item.state || {};
             const accessVal = st.access || 'unknown';
             const sessionVal = st.session || 'unknown';
             const deviceVal = st.device || 'unknown';
+
+            // 접속 상태(access) 한국어 설명 추가
+            let accessText = accessVal;
+            if (accessVal === 'allowed') accessText = '허용 (allowed)';
+            else if (accessVal === 'denied') accessText = '거부 (denied)';
+            else accessText = `확인 불가 (${accessVal})`;
 
             let sessionText = sessionVal;
             if (sessionVal === 'active') sessionText = '활성 (active)';
@@ -322,7 +316,7 @@ export function createStudentView() {
             else if (deviceVal === 'noncompliant') deviceText = '보안 기준 미충족 (noncompliant)';
             else deviceText = `확인 불가 (${deviceVal})`;
 
-            addDetailLine(`상태 - 접속(access): ${accessVal}`);
+            addDetailLine(`상태 - 접속(access): ${accessText}`);
             addDetailLine(`상태 - 세션(session): ${sessionText}`);
             addDetailLine(`상태 - 기기(device): ${deviceText}`);
 
