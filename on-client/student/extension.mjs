@@ -19,13 +19,11 @@ export function createStudentView() {
       else if (mode === 'disconnected') modeText = '연결 없음';
       else if (mode === 'unknown') modeText = '확인 불가';
 
-      // 1. me, devices, sessions 중 하나라도 loading 상태인 경우
       if (mStatus === 'loading' || dStatus === 'loading' || sStatus === 'loading') {
         container.textContent = modeText ? `불러오는 중 (${modeText})` : '불러오는 중';
         return container;
       }
 
-      // 2. me, devices, sessions 중 하나라도 error 상태이거나 에러가 있는 경우
       if (mStatus === 'error' || dStatus === 'error' || sStatus === 'error' || error) {
         const errObj = mError || dError || sError || error;
         const errorMsg = errObj?.message || errObj || '알 수 없는 오류 발생';
@@ -299,7 +297,7 @@ export function createStudentView() {
             const sessionVal = st.session || 'unknown';
             const deviceVal = st.device || 'unknown';
 
-            // 접속 상태(access) 한국어 설명 추가
+            // 접속 상태(access) 한국어 설명 및 원래 값 함께 표시
             let accessText = accessVal;
             if (accessVal === 'allowed') accessText = '허용 (allowed)';
             else if (accessVal === 'denied') accessText = '거부 (denied)';
