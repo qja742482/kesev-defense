@@ -579,7 +579,6 @@
         const evidenceIds = Array.isArray(expData.evidenceIds) ? expData.evidenceIds : [];
         const eventEvidence = Array.isArray(event.evidence) ? event.evidence : [];
 
-        // 근거 ID 검증: evidenceIds가 event.evidence에 모두 존재하는지 확인
         let evidenceMismatch = false;
         const verifiedEvidences = [];
         for (const id of evidenceIds) {
@@ -596,7 +595,6 @@
           return container;
         }
 
-        // 성공한 설명에만 data-student-explanation-event 부여
         container.setAttribute('data-student-explanation-event', event.id);
 
         const addLine = (text) => {
@@ -609,7 +607,6 @@
         addLine('AI 설명(참고용)');
         addLine(expData.summary || '요약 내용 없음');
 
-        // 근거 표시
         addLine('[인용된 근거]');
         if (verifiedEvidences.length > 0) {
           verifiedEvidences.forEach(ev => {
@@ -619,7 +616,6 @@
           addLine('인용된 근거 없음');
         }
 
-        // 규칙 표시
         addLine('[관련 규칙]');
         const eventRules = Array.isArray(event.rules) ? event.rules : [];
         if (eventRules.length > 0) {
@@ -630,7 +626,6 @@
           addLine('관련 규칙 없음');
         }
 
-        // 상태 표시 (unknown인 항목 분리)
         addLine('[현재 상태]');
         const state = event.state || {};
         const accessState = state.access || 'unknown';
@@ -642,7 +637,6 @@
         addLine('세션: ' + formatStateVal(sessionState));
         addLine('기기: ' + formatStateVal(deviceState));
 
-        // 제안(Proposals) 표시
         addLine('[조치 제안]');
         const proposals = Array.isArray(expData.proposals) ? expData.proposals : [];
         const supportedActions = Array.isArray(event.supportedActions) ? event.supportedActions : [];
@@ -655,7 +649,7 @@
           }
         } else {
           proposals.forEach(prop => {
-            addLine('조치: ' + (prop.action || '알 수 없음') + ' | 이유: ' + (prop.reason || '이유 없음'));
+            addLine('조치: ' + (prop.action || '알 수 없는 조치') + ' | 이유: ' + (prop.reason || '이유 없음'));
             addLine('사람 확인이 필요하며 아직 실행되지 않았습니다.');
           });
         }
@@ -664,6 +658,130 @@
       }
 
       container.textContent = '설명 대기 중';
+      return container;
+    },
+    renderAction({ status, event, actionId, target, receipt, observation, message, confirmationExpiresAt, error } = {}) {
+      const container = document.createElement('div');
+      const addLine = (text) => {
+        const p = document.createElement('p');
+        p.textContent = text;
+        container.append(p);
+      };
+
+      const eventId = event?.id || '기록 없음';
+      const evidenceList = Array.isArray(event?.evidence) ? event.evidence : [];
+      const evidenceIdsText = evidenceList.map(ev => ev.id).join(', ') || '없음';
+      const aId = actionId || '지정 안 됨';
+      const tId = target?.id || '대상 없음';
+      const tGen = target?.generation ?? '세대 없음';
+      const rReqId = receipt?.requestId || '요청 ID 없음';
+      const rRecId = receipt?.receiptId || '영수증 ID 없음';
+      const rVer = receipt?.version ?? '버전 없음';
+
+      // 기본 식별 정보 표기 함수
+      const appendIdentifiers = () => {
+        addLine('사건 ID: ' + eventId + ' | 근거 ID: ' + evidenceIdsText);
+        addLine('조치 ID(actionId): ' + aId + ' | 대상 ID(target.id): ' + tId + ' (세대: ' + tGen + ')');
+        addLine('요청 ID(requestId): ' + rReqId + ' | 영수증 ID(receiptId): ' + rRecId + ' | 버전(version): ' + rVer);
+      };
+
+      if (status === 'idle') {
+        addLine('상태: 아직 미실행 (idle)');
+        addLine('지금 기록에는 연동 시스템이 지원하는 조치가 없어(supportedActions 빈 배열) 실제 처리 경로가 열리지 않습니다. 화면에 조치 준비 버튼이 나오지 않는 것이 정상입니다.');
+        return container;
+      }
+
+      if (status === 'prepared') {
+        container.setAttribute('data-student-action-event', eventId);
+        if (rReqId !== '요청 ID 없음') {
+          container.setAttribute('data-student-action-request', rReqId);
+        }
+        addLine('상태: 준비됨·미실행 (prepared)');
+        addLine('확인 기한: ' + (confirmationExpiresAt || '기한 미지정'));
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'executing') {
+        container.setAttribute('data-student-action-event', eventId);
+        if (rReqId !== '요청 ID 없음') {
+          container.setAttribute('data-student-action-request', rReqId);
+        }
+        addLine('상태: 서버에 전달 중 (executing)');
+        addLine('결과가 아직 확인되지 않았습니다 (완료 아님).');
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'pending') {
+        container.setAttribute('data-student-action-event', eventId);
+        if (rReqId !== '요청 ID 없음') {
+          container.setAttribute('data-student-action-request', rReqId);
+        }
+        addLine('상태: 서버 접수·처리 중 (pending)');
+        addLine('서버가 접수했다는 것(ACK)은 효과가 확인된 것이 아닙니다.');
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'succeeded') {
+        const isEffectApplied = observation && observation.effectApplied === true;
+        if (isEffectApplied) {
+          container.setAttribute('data-student-action-event', eventId);
+          if (rReqId !== '요청 ID 없음') {
+            container.setAttribute('data-student-action-request', rReqId);
+          }
+          addLine('상태: 효과 확인 (succeeded)');
+          addLine('관측 시각: ' + (observation.observedAt || '시각 미확인'));
+          addLine('effectApplied: true');
+          addLine('영수증 ID(receiptId): ' + rRecId);
+          appendIdentifiers();
+        } else {
+          addLine('상태: 결과 불명 (unknown / condition not met)');
+          addLine('효과가 확인되지 않았으므로 성공으로 판단할 수 없습니다. 결과 재조회를 진행하세요.');
+          appendIdentifiers();
+        }
+        return container;
+      }
+
+      if (status === 'denied') {
+        addLine('상태: 거절 (denied)');
+        addLine('거절 사유: ' + (message || '사유 없음'));
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'failed') {
+        addLine('상태: 실패 (failed)');
+        addLine('실패 사유: ' + (message || '사유 없음'));
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'unknown') {
+        addLine('상태: 결과 불명 (unknown)');
+        addLine('효과 없음으로도 성공으로도 판단하지 마십시오. 결과 재조회를 하시기 바랍니다.');
+        appendIdentifiers();
+        return container;
+      }
+
+      if (status === 'expired') {
+        addLine('상태: 확인 기한 지남 (expired)');
+        addLine('확인 기한이 지났습니다. 조치를 다시 준비하십시오.');
+        appendIdentifiers();
+      }
+
+      if (status === 'error') {
+        const errObj = error || {};
+        const code = errObj.code || 'UNKNOWN';
+        const errMsg = errObj.message || '알 수 없는 오류';
+        addLine('상태: 요청 처리 안 됨 (error)');
+        addLine('오류 코드: ' + code + ' | 메시지: ' + errMsg);
+        appendIdentifiers();
+        return container;
+      }
+
+      addLine('상태: 알 수 없음 (status: ' + (status || 'none') + ')');
       return container;
     },
     renderVulnerabilities() { return '학생 구현 대기: 정확한 설치 버전·OSV 출처·조회 시각·부분 결과·조회 실패를 구분하세요.'; },
