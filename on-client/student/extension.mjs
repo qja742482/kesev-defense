@@ -486,6 +486,95 @@
 
       return container;
     },
+    renderAiConnection({ status, mode, data, error, checkedAt, explanationAccepted } = {}) {
+      const container = document.createElement('div');
+      const addLine = (text) => {
+        const p = document.createElement('p');
+        p.textContent = text;
+        container.append(p);
+      };
+
+      if (status === 'idle') {
+        addLine('AI 연결 점검 전');
+        addLine('다시 점검은 사용자가 버튼을 직접 누르는 것입니다.');
+        return container;
+      }
+
+      if (status === 'loading') {
+        addLine('AI 연결 점검 중');
+        return container;
+      }
+
+      if (status === 'error') {
+        const errObj = error || {};
+        const code = errObj.code || 'UNKNOWN';
+        const msg = errObj.message || '알 수 없는 오류';
+
+        let causeText = '기타 오류';
+        if (code.includes('AUTH') || code.includes('UNAUTHORIZED')) {
+          causeText = '계정 연결 다시 확인, 담당자 확인';
+        } else if (code.includes('PERMISSION') || code.includes('DENIED') || code.includes('PENDING')) {
+          causeText = '담당자에게 계정 연결과 앱 권한 확인 요청';
+        } else if (code.includes('LIMIT') || code.includes('QUOTA')) {
+          causeText = '담당자 확인';
+        } else if (code.includes('TIME') || code.includes('SCHEDULE')) {
+          causeText = '이용 시간 확인';
+        } else if (code.includes('TIMEOUT') || code.includes('RATE') || code.includes('NETWORK')) {
+          causeText = '잠시 뒤 직접 다시 점검';
+        } else if (code.includes('CANCEL')) {
+          causeText = '취소됨. 이전 결과는 현재 결과가 아닙니다.';
+        } else if (code.includes('MODEL') || code.includes('NOT_FOUND')) {
+          causeText = '담당자에게 모델 허용 설정 확인 요청';
+        }
+
+        addLine('연결 점검 실패 원인: ' + causeText + ' (' + code + ': ' + msg + ')');
+        addLine('다시 점검은 사용자가 버튼을 직접 누르는 것입니다.');
+        return container;
+      }
+
+      if (status === 'ok') {
+        const auth = data?.audienceAuthorization;
+        const authText = auth === 'verified' ? '앱 권한 확인 후 점검(verified)' : '시험 연결 점검(test)';
+        const count = data?.modelCount ?? '알 수 없음';
+        const time = checkedAt || data?.checkedAt || '시각 미확인';
+
+        addLine('AI 연결 점검 결과: ' + authText);
+        addLine('사용 가능한 모델 수: ' + count);
+        addLine('점검 시각: ' + time);
+        addLine('사건 설명은 아직 실행하지 않았습니다.');
+        return container;
+      }
+
+      addLine('AI 연결 점검 전');
+      return container;
+    },
+    renderExplanation({ event, explanation, checkedAt } = {}) {
+      const container = document.createElement('div');
+      
+      if (!explanation) {
+        container.textContent = '사건 설명 대기 중';
+        return container;
+      }
+
+      if (explanation.status === 'ok') {
+        container.setAttribute('data-student-explanation-event', event?.id || '');
+        const pId = document.createElement('p');
+        pId.textContent = '사건 ID: ' + (event?.id || '알 수 없음');
+        const pSummary = document.createElement('p');
+        pSummary.textContent = '설명: ' + (explanation.data?.summary || '내용 없음');
+        container.append(pId);
+        container.append(pSummary);
+      } else if (explanation.status === 'error') {
+        const err = explanation.error || {};
+        const pErr = document.createElement('p');
+        pErr.textContent = '사건 설명 실패 (' + (err.code || 'UNKNOWN') + '): ' + (err.message || '알 수 없는 오류') + '. 기록은 그대로입니다.';
+        container.append(pErr);
+      } else {
+        container.textContent = '사건 설명 대기 중';
+      }
+
+      return container;
+    },
     renderVulnerabilities() { return '학생 구현 대기: 정확한 설치 버전·OSV 출처·조회 시각·부분 결과·조회 실패를 구분하세요.'; },
     renderAiConnection() { return '학생 구현 대기: 모델 응답 점검과 실제 사건 설명을 구분하고 AI 오류·취소·수동 복구를 안내하세요.'; },
     renderExplanation() { return '학생 구현 대기: 선택한 사건의 근거·규칙·현재 상태와 AI 설명을 연결하세요. 제안은 자동 실행하지 않습니다.'; },
