@@ -535,7 +535,7 @@
       if (status === 'ok') {
         const auth = data?.audienceAuthorization;
         const authText = auth === 'verified' ? '앱 권한 확인 후 점검(verified)' : '시험 연결 점검(test)';
-        const count = data?.modelCount ?? '알 수 없음';
+        const count = data?.modelCount ?? '알 수 없는 수';
         const time = checkedAt || data?.checkedAt || '시각 미확인';
 
         addLine('AI 연결 점검 결과: ' + authText);
@@ -550,29 +550,120 @@
     },
     renderExplanation({ event, explanation, checkedAt } = {}) {
       const container = document.createElement('div');
-      
-      if (!explanation) {
-        container.textContent = '사건 설명 대기 중';
+
+      if (!event) {
+        container.textContent = '보안 기록에서 기록을 먼저 고르세요';
+        return container;
+      }
+
+      if (!explanation || explanation.status === 'idle') {
+        container.textContent = '설명 대기 중';
+        return container;
+      }
+
+      if (explanation.status === 'loading') {
+        container.textContent = '설명 요청 중';
+        return container;
+      }
+
+      if (explanation.status === 'error') {
+        const errObj = explanation.error || {};
+        const code = errObj.code || 'UNKNOWN';
+        const msg = errObj.message || '알 수 없는 오류';
+        container.textContent = 'AI 설명 실패: ' + code + ' - ' + msg + '. 기록은 그대로입니다.';
         return container;
       }
 
       if (explanation.status === 'ok') {
-        container.setAttribute('data-student-explanation-event', event?.id || '');
-        const pId = document.createElement('p');
-        pId.textContent = '사건 ID: ' + (event?.id || '알 수 없음');
-        const pSummary = document.createElement('p');
-        pSummary.textContent = '설명: ' + (explanation.data?.summary || '내용 없음');
-        container.append(pId);
-        container.append(pSummary);
-      } else if (explanation.status === 'error') {
-        const err = explanation.error || {};
-        const pErr = document.createElement('p');
-        pErr.textContent = '사건 설명 실패 (' + (err.code || 'UNKNOWN') + '): ' + (err.message || '알 수 없는 오류') + '. 기록은 그대로입니다.';
-        container.append(pErr);
-      } else {
-        container.textContent = '사건 설명 대기 중';
+        const expData = explanation.data || {};
+        const evidenceIds = Array.isArray(expData.evidenceIds) ? expData.evidenceIds : [];
+        const eventEvidence = Array.isArray(event.evidence) ? event.evidence : [];
+
+        // 근거 ID 검증: evidenceIds가 event.evidence에 모두 존재하는지 확인
+        let evidenceMismatch = false;
+        const verifiedEvidences = [];
+        for (const id of evidenceIds) {
+          const found = eventEvidence.find(ev => ev.id === id);
+          if (!found) {
+            evidenceMismatch = true;
+            break;
+          }
+          verifiedEvidences.push(found);
+        }
+
+        if (evidenceMismatch) {
+          container.textContent = '근거가 맞지 않음: AI 설명이 인용한 근거 ID가 사건 기록과 일치하지 않아 사용할 수 없습니다.';
+          return container;
+        }
+
+        // 성공한 설명에만 data-student-explanation-event 부여
+        container.setAttribute('data-student-explanation-event', event.id);
+
+        const addLine = (text) => {
+          const p = document.createElement('p');
+          p.textContent = text;
+          container.append(p);
+        };
+
+        addLine('사건 ID: ' + event.id);
+        addLine('AI 설명(참고용)');
+        addLine(expData.summary || '요약 내용 없음');
+
+        // 근거 표시
+        addLine('[인용된 근거]');
+        if (verifiedEvidences.length > 0) {
+          verifiedEvidences.forEach(ev => {
+            addLine('근거 ID ' + ev.id + ' — ' + ev.text);
+          });
+        } else {
+          addLine('인용된 근거 없음');
+        }
+
+        // 규칙 표시
+        addLine('[관련 규칙]');
+        const eventRules = Array.isArray(event.rules) ? event.rules : [];
+        if (eventRules.length > 0) {
+          eventRules.forEach(rule => {
+            addLine('규칙 ID ' + rule.id + ' — ' + rule.text);
+          });
+        } else {
+          addLine('관련 규칙 없음');
+        }
+
+        // 상태 표시 (unknown인 항목 분리)
+        addLine('[현재 상태]');
+        const state = event.state || {};
+        const accessState = state.access || 'unknown';
+        const sessionState = state.session || 'unknown';
+        const deviceState = state.device || 'unknown';
+
+        const formatStateVal = (val) => val === 'unknown' ? '확인 불가 (unknown)' : val;
+        addLine('접속: ' + formatStateVal(accessState));
+        addLine('세션: ' + formatStateVal(sessionState));
+        addLine('기기: ' + formatStateVal(deviceState));
+
+        // 제안(Proposals) 표시
+        addLine('[조치 제안]');
+        const proposals = Array.isArray(expData.proposals) ? expData.proposals : [];
+        const supportedActions = Array.isArray(event.supportedActions) ? event.supportedActions : [];
+
+        if (proposals.length === 0) {
+          if (supportedActions.length === 0) {
+            addLine('연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상)');
+          } else {
+            addLine('AI가 제안한 조치가 없습니다.');
+          }
+        } else {
+          proposals.forEach(prop => {
+            addLine('조치: ' + (prop.action || '알 수 없음') + ' | 이유: ' + (prop.reason || '이유 없음'));
+            addLine('사람 확인이 필요하며 아직 실행되지 않았습니다.');
+          });
+        }
+
+        return container;
       }
 
+      container.textContent = '설명 대기 중';
       return container;
     },
     renderVulnerabilities() { return '학생 구현 대기: 정확한 설치 버전·OSV 출처·조회 시각·부분 결과·조회 실패를 구분하세요.'; },
