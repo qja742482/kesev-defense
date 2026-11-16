@@ -22,13 +22,14 @@
    cd on-client
    npm install
    npm start
+   ```
 
 ## 5. 시스템 아키텍처 및 데이터 흐름 (System Architecture & Data Flow)
 
 본 프로젝트는 브라우저 클라이언트, Node.js 로컬 앱 서버, 그리고 학생 구현 모듈과 엔진 간의 유기적인 통신 구조로 이루어져 있습니다.
 
 1) 시스템 구성도 (File Path & Module Mapping)
-
+```mermaid
 flowchart TD
     subgraph Browser ["클라이언트 브라우저 (UI / Frontend)"]
         UI["public/index.html & app.js"]
