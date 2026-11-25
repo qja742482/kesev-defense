@@ -85,4 +85,5 @@ npm start
 | `on-client/docs/DAY3_PC_SECURITY.md` | 네트워크·방화벽·Windows 기록 읽기 전용 조회 |
 | `on-client/docs/DAY4_UI_POLISH.md` | 다시 조회·실패 안내·키보드 사용 |
 | `on-client/docs/DAY5_RUN_CHECK.md` | 처음 보는 사람 실행 시험과 고친 안내 |
+| `on-client/docs/DAY7_DEMO_SUMMARY.md` | 시연 순서, 제공·내 기능 구분, 한계, 확인 근거 |
 | `on-client/README.md` | 시작 틀이 제공한 학생용 안내 (수정하지 않음) |
