@@ -349,6 +349,7 @@
     },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const container = document.createElement('div');
+            container.append(buildPcStatusPanel({ devices, mode }));   // [내가 추가] 내 PC 상태 카드·추이
 
       const addSectionTitle = (title) => {
         const h = document.createElement('p');
@@ -866,4 +867,116 @@
       return container;
     }
   };
+}
+// [내가 추가] 관제 대시보드 상단 카드 4개 + 아래 추이 비교
+// innerHTML을 쓰지 않고 textContent만 쓴다 (서버 값이 화면 코드로 해석되지 않게)
+function buildPcStatusPanel({ devices, mode } = {}) {
+  const el = (tag, text, style = {}) => {
+    const n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    Object.assign(n.style, style);
+    return n;
+  };
+  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ko-KR') : '시각 없음');
+
+  const panel = el('div', null, { marginBottom: '14px' });
+  panel.append(el('p', '[내 PC 상태 — 이 PC에서 직접 잰 값]', { fontWeight: 'bold', marginTop: '10px' }));
+
+  const grid = el('div', null, { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '8px' });
+  const makeCard = (title) => {
+    const card = el('div', null, { border: '1px solid #8884', borderRadius: '8px', padding: '8px' });
+    const value = el('div', '측정값 불러오는 중', { fontSize: '1.2em', fontWeight: 'bold', margin: '4px 0' });
+    const note = el('div', '', { fontSize: '0.8em', opacity: '0.8' });
+    card.append(el('div', title, { fontSize: '0.85em' }), value, note);
+    grid.append(card);
+    return { value, note };
+  };
+  const cards = {
+    cpu: makeCard('CPU 사용률'),
+    memory: makeCard('메모리 사용량'),
+    disk: makeCard('디스크 남은 공간'),
+    engine: makeCard('엔진 연결'),
+  };
+  panel.append(grid);
+
+  const trend = el('div', null, { marginTop: '10px' });
+  panel.append(trend);
+
+  // 4번째 카드: 엔진 연결 상태 (측정값이 아니라 제공 코드가 준 연결 결과)
+  const dStatus = devices?.status;
+  if (dStatus === 'error') {
+    cards.engine.value.textContent = '연결 없음';
+    cards.engine.note.textContent = devices?.error?.code || devices?.error?.message || '이유 정보 없음';
+  } else if (dStatus === 'loading') {
+    cards.engine.value.textContent = '확인 중';
+  } else if (devices?.data) {
+    cards.engine.value.textContent = '연결됨';
+  } else {
+    cards.engine.value.textContent = '확인 불가';
+    cards.engine.note.textContent = '기기 응답이 없습니다';
+  }
+  if (mode === 'demo') cards.engine.note.textContent += ' · 예시 모드(실제 연결 아님)';
+
+  const show = (card, m, format) => {
+    if (!m) {
+      card.value.textContent = '확인 불가';
+      card.note.textContent = '첫 측정 중입니다. 다시 불러오기를 누르세요';
+      return;
+    }
+    if (m.status !== '실측') {
+      card.value.textContent = '확인 불가';
+      card.note.textContent = `${m.reason} · ${time(m.measuredAt)}`;
+      return;
+    }
+    card.value.textContent = format(m);
+    card.note.textContent = `실측 · ${time(m.measuredAt)}`;
+  };
+
+  const drawTrend = (history, startedAt) => {
+    trend.append(el('p', `[추이 비교] 서버 시작(${time(startedAt)}) 이후 측정분만 표시 · 최근 ${Math.min(history.length, 20)}개`, { fontWeight: 'bold' }));
+    if (history.length === 0) { trend.append(el('p', '아직 쌓인 측정값이 없습니다')); return; }
+    const diff = (key) => {
+      const vals = history.map((h) => h[key]).filter((v) => typeof v === 'number');
+      if (vals.length < 2) return '비교할 값 부족 (30초 뒤 다시 불러오기)';
+      const f = (n) => (n >= 0 ? '+' : '') + n.toFixed(1);
+      return `처음 대비 ${f(vals.at(-1) - vals[0])}%p · 직전 대비 ${f(vals.at(-1) - vals.at(-2))}%p`;
+    };
+    trend.append(el('p', `CPU: ${diff('cpu')}`), el('p', `메모리: ${diff('memory')}`));
+    for (const h of history.slice(-20)) {
+      const row = el('div', null, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8em' });
+      row.append(el('span', time(h.at), { width: '80px' }));
+      for (const [label, v, color] of [['CPU', h.cpu, '#7c5cff'], ['메모리', h.memory, '#3ecf8e']]) {
+        const box = el('span', null, { flex: '1', display: 'flex', alignItems: 'center', gap: '4px' });
+        if (typeof v === 'number') {
+          box.append(el('span', null, { width: `${Math.max(1, v)}%`, height: '8px', background: color, borderRadius: '4px' }));
+          box.append(el('span', `${label} ${v}%`));
+        } else {
+          box.append(el('span', `${label} 확인 불가`));
+        }
+        row.append(box);
+      }
+      trend.append(row);
+    }
+  };
+
+  fetch('/api/system', { cache: 'no-store' })
+    .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then((body) => {
+      if (!body?.ok) throw new Error(body?.error?.code || '응답 형식이 예상과 다릅니다');
+      const s = body.data || {};
+      const l = s.latest || {};
+      show(cards.cpu, l.cpu, (m) => `${m.value} %`);
+      show(cards.memory, l.memory, (m) => `${m.value} / ${m.total} GB (${m.percent} %)`);
+      show(cards.disk, l.disk, (m) => `${m.value} GB 남음 (${m.drive})`);
+      drawTrend(s.history || [], s.serverStartedAt);
+    })
+    .catch((e) => {
+      for (const k of ['cpu', 'memory', 'disk']) {
+        cards[k].value.textContent = '확인 불가';
+        cards[k].note.textContent = `앱 서버의 /api/system 응답을 받지 못했습니다 (${e.message})`;
+      }
+      trend.append(el('p', '추이: 확인 불가 (측정값을 받지 못함)'));
+    });
+
+  return panel;
 }

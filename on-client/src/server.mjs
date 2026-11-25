@@ -19,6 +19,7 @@ import {createProjectScanner} from './vulnerabilities/project-scan.mjs';
 import {buildLocalLearnerSupportGuide,isLearnerSupportProblemKind,readLocalLearnerSupportObservation} from './learner-support/service.mjs';
 import {nativeOwn,nativePublicError} from './connection/native-login.mjs';
 import {createNativeHostContext,captureNativeHostConfiguration,readNativeHostConfiguration,openNativeHostOperation,readNativeHostOperation,assertNativeHostOperation,createNativeOperationVault,closeNativeHostOperation} from './connection/native-context.mjs';
+import { getPcStatus } from './system/pc-status.mjs';   // [내가 추가] 내 PC 상태 측정
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(value);
@@ -688,6 +689,9 @@ export function createOnServer(serverOptions={}) {
         assertAlive();
         send(200,{ok:true,data:guide});return;
         }finally{closeNativeHostOperation(nativeOperation);}
+      }
+      if(req.method==='GET'&&url.pathname==='/api/system'){
+        send(200,{ok:true,data:getPcStatus()});return;
       }
       if(req.method==='GET'&&url.pathname==='/api/diagnostics'){
         // 자동 호출이나 비밀 원문·전체 설정 출력 없이 로컬 연결 상태만 진단한다.
