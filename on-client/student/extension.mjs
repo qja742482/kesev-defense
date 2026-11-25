@@ -349,8 +349,16 @@
     },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const container = document.createElement('div');
-            container.append(buildPcStatusPanel({ devices, mode }));   // [내가 추가] 내 PC 상태 카드·추이
-
+                  // [내가 추가] 2일차·3일차 영역을 따로 감싼다: 한쪽이 실패해도 다른 쪽과 기존 표시는 계속 보이게
+            // [내가 추가] 2일차·3일차 영역을 따로 감싼다: 한쪽이 실패해도 다른 쪽과 기존 표시는 계속 보이게
+      const showPanelError = (label, e) => {
+        console.error(`[케셰브] ${label} 표시 오류`, e);
+        const p = document.createElement('p');
+        p.textContent = `[${label}] 확인 불가 — 화면 표시 중 오류: ${e?.message || e}`;
+        container.append(p);
+      };
+      try { container.append(buildPcStatusPanel({ devices, mode })); } catch (e) { showPanelError('내 PC 상태', e); }
+      try { container.append(buildPcSecurityPanel({ devices, mode })); } catch (e) { showPanelError('내 PC 보안 구성', e); }
       const addSectionTitle = (title) => {
         const h = document.createElement('p');
         h.textContent = title;
@@ -976,6 +984,166 @@ function buildPcStatusPanel({ devices, mode } = {}) {
         cards[k].note.textContent = `앱 서버의 /api/system 응답을 받지 못했습니다 (${e.message})`;
       }
       trend.append(el('p', '추이: 확인 불가 (측정값을 받지 못함)'));
+    });
+
+  return panel;
+}
+// [내가 추가] 3일차 · 내 PC 보안 구성 (네트워크 · 방화벽 · Windows 기록 · SDP 연결)
+// - PC 조회 값(실측/확인 불가)과 SDP 연결 상태는 출처가 다르므로 카드와 문구를 따로 둔다.
+// - Windows 기록 건수는 침해나 공격 탐지 결과가 아니다.
+// - innerHTML을 쓰지 않고 textContent만 쓴다.
+function buildPcSecurityPanel({ devices, mode } = {}) {
+  const el = (tag, text, style = {}) => {
+    const n = document.createElement(tag);
+    if (text != null) n.textContent = text;
+    Object.assign(n.style, style);
+    return n;
+  };
+  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ko-KR') : '시각 없음');
+  const NOTICE = '※ Windows 기록 건수는 침해나 공격 탐지 결과가 아닙니다. 프로그램·장치가 남긴 경고·오류의 개수입니다.';
+
+  const panel = el('div', null, { marginBottom: '14px' });
+  panel.append(el('p', '[내 PC 보안 구성 — 이 PC에서 직접 조회한 값 (읽기 전용)]', { fontWeight: 'bold', marginTop: '14px' }));
+
+  const grid = el('div', null, { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '8px' });
+  const makeCard = (title, sourceLabel) => {
+    const card = el('div', null, { border: '1px solid #8884', borderRadius: '8px', padding: '8px' });
+    const value = el('div', '조회 중', { fontSize: '1.1em', fontWeight: 'bold', margin: '4px 0' });
+    const note = el('div', '', { fontSize: '0.8em', opacity: '0.8' });
+    card.append(el('div', title, { fontSize: '0.85em' }), value, note, el('div', sourceLabel, { fontSize: '0.75em', opacity: '0.6', marginTop: '4px' }));
+    grid.append(card);
+    return { value, note };
+  };
+  const cards = {
+    network: makeCard('네트워크 구성', '출처: PC 직접 조회'),
+    firewall: makeCard('방화벽 설정', '출처: PC 직접 조회 · 읽기만'),
+    events: makeCard('Windows 기록 (최근 24시간)', '출처: PC 직접 조회 · 공격 탐지 아님'),
+    sdp: makeCard('SDP 연결', '출처: SDP 서버 응답 (PC 조회와 별개)'),
+  };
+  panel.append(grid);
+  panel.append(el('p', NOTICE, { fontSize: '0.85em', marginTop: '6px' }));
+
+  const trend = el('div', null, { marginTop: '10px' });
+  const records = el('div', null, { marginTop: '10px' });
+  panel.append(trend, records);
+
+  const setFail = (card, m) => {
+    card.value.textContent = '확인 불가';
+    card.note.textContent = `${m?.reason || '이유 정보 없음'} · ${time(m?.checkedAt)}`;
+  };
+
+  // SDP 연결 카드: PC 조회 성공 여부와 섞지 않는다
+  const showSdp = (serverMode) => {
+    if (devices?.status !== 'error' && devices?.data && mode !== 'demo') {
+      cards.sdp.value.textContent = 'SDP 연결됨';
+      cards.sdp.note.textContent = '기존 서버·에이전트 응답 확인';
+      return;
+    }
+    cards.sdp.value.textContent = 'SDP 미연결';
+    const code = devices?.error?.code || (serverMode === 'disconnected' ? 'ENGINE_NOT_CONNECTED' : '');
+    const why = serverMode === 'demo' || mode === 'demo' ? '예시 모드 (실제 연결 아님)' : code || '연결 응답 없음';
+    cards.sdp.note.textContent = why;
+  };
+
+  const fill = (s, serverMode) => {
+    const l = s.latest;
+    showSdp(serverMode);
+    if (!l) {
+      for (const k of ['network', 'firewall', 'events']) {
+        cards[k].value.textContent = '확인 불가';
+        cards[k].note.textContent = '첫 조회 중입니다. 몇 초 뒤 다시 불러오기를 누르세요';
+      }
+      return;
+    }
+
+    // 네트워크
+    const n = l.network;
+    if (n?.status === '실측') {
+      cards.network.value.textContent = `외부 어댑터 ${n.externalCount}개`;
+      cards.network.note.textContent = `IPv4 ${n.ipv4Count}개 · 실측 · ${time(n.checkedAt)}`;
+    } else setFail(cards.network, n);
+
+    // 방화벽
+    const f = l.firewall;
+    if (f?.status === '실측') {
+      cards.firewall.value.textContent = `켜짐 ${f.enabledCount} / ${f.profileCount}개 프로필`;
+      cards.firewall.note.textContent = `실측 · ${time(f.checkedAt)}`;
+    } else setFail(cards.firewall, f);
+
+    // Windows 기록 (System + Application만 합계, 하나라도 못 읽으면 합계를 만들지 않음)
+    const sys = l.events?.System;
+    const app = l.events?.Application;
+    if (sys?.status === '실측' && app?.status === '실측') {
+      cards.events.value.textContent = `오류 ${sys.error + app.error} · 경고 ${sys.warning + app.warning}`;
+      cards.events.note.textContent = `System + Application · 실측 · ${time(sys.checkedAt)}`;
+    } else {
+      const bad = [sys, app].find((x) => x?.status !== '실측');
+      setFail(cards.events, bad);
+    }
+
+    drawTrend(s.history || [], s.serverStartedAt, s.intervalSeconds);
+    drawRecords(l);
+  };
+
+  const drawTrend = (history, startedAt, interval) => {
+    trend.append(el('p', `[추이 비교] 서버 시작(${time(startedAt)}) 이후 ${Math.round((interval || 300) / 60)}분 간격 조회분 · 최근 ${Math.min(history.length, 12)}개`, { fontWeight: 'bold' }));
+    if (history.length === 0) { trend.append(el('p', '아직 쌓인 조회 결과가 없습니다')); return; }
+    const v = (x) => (typeof x === 'number' ? String(x) : '확인 불가');
+    const rows = history.slice(-12);
+    rows.forEach((h, i) => {
+      const prev = rows[i - 1];
+      const d = (key) => (prev && typeof h[key] === 'number' && typeof prev[key] === 'number'
+        ? ` (${h[key] - prev[key] >= 0 ? '+' : ''}${h[key] - prev[key]})` : '');
+      trend.append(el('div',
+        `${time(h.at)} · System 오류 ${v(h.systemError)}${d('systemError')} 경고 ${v(h.systemWarning)}${d('systemWarning')} · Application 오류 ${v(h.appError)}${d('appError')} 경고 ${v(h.appWarning)}${d('appWarning')}`,
+        { fontSize: '0.8em' }));
+    });
+    if (history.length < 2) trend.append(el('p', '비교할 조회 결과가 부족합니다 (5분 뒤 다시 불러오기)', { fontSize: '0.8em', opacity: '0.8' }));
+  };
+
+  const drawRecords = (l) => {
+    records.append(el('p', '[기록] 조회 상세', { fontWeight: 'bold' }));
+
+    records.append(el('p', '네트워크 어댑터', { fontWeight: 'bold', fontSize: '0.9em' }));
+    if (l.network?.status === '실측') {
+      for (const a of l.network.adapters) {
+        const addrs = a.addresses.map((x) => `${x.family} ${x.cidr}`).join(', ');
+        records.append(el('div', `${a.name}${a.internal ? ' (내부)' : ''} · MAC ${a.mac} · ${addrs}`, { fontSize: '0.8em' }));
+      }
+    } else records.append(el('div', `확인 불가 · ${l.network?.reason || ''}`, { fontSize: '0.8em' }));
+
+    records.append(el('p', '방화벽 프로필 (읽기만, 설정 변경 없음)', { fontWeight: 'bold', fontSize: '0.9em' }));
+    const act = (x) => (x === 'NotConfigured' ? '설정 안 됨(Windows 기본 동작)' : x === 'Block' ? '차단' : x === 'Allow' ? '허용' : x);
+    const on = (x) => (x === 'True' ? '켜짐' : x === 'False' ? '꺼짐' : '설정 안 됨');
+    if (l.firewall?.status === '실측') {
+      for (const p of l.firewall.profiles) {
+        records.append(el('div', `${p.name} · ${on(p.enabled)} · 들어오는 연결 기본: ${act(p.inbound)} · 나가는 연결 기본: ${act(p.outbound)}`, { fontSize: '0.8em' }));
+      }
+    } else records.append(el('div', `확인 불가 · ${l.firewall?.reason || ''}`, { fontSize: '0.8em' }));
+
+    records.append(el('p', 'Windows 기록 건수 (최근 24시간)', { fontWeight: 'bold', fontSize: '0.9em' }));
+    records.append(el('div', NOTICE, { fontSize: '0.8em', opacity: '0.8' }));
+    for (const [name, x] of Object.entries(l.events || {})) {
+      let text;
+      if (x.status !== '실측') text = `${name} · 확인 불가 · ${x.reason}`;
+      else if (x.adminOnly) text = `${name} · 읽기 가능 (${x.note})`;
+      else text = `${name} · 오류 ${x.error} · 경고 ${x.warning}${x.capped ? ' (5000건 이상, 일부만 셈)' : ''} · 실측 · ${time(x.checkedAt)}`;
+      records.append(el('div', text, { fontSize: '0.8em' }));
+    }
+  };
+
+  fetch('/api/pc-security', { cache: 'no-store' })
+    .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then((body) => {
+      if (!body?.ok) throw new Error(body?.error?.code || '응답 형식이 예상과 다릅니다');
+      fill(body.data || {}, body.meta?.mode);
+    })
+    .catch((e) => {
+      for (const k of ['network', 'firewall', 'events']) {
+        cards[k].value.textContent = '확인 불가';
+        cards[k].note.textContent = `앱 서버의 /api/pc-security 응답을 받지 못했습니다 (${e.message})`;
+      }
+      showSdp();
     });
 
   return panel;

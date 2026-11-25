@@ -20,6 +20,7 @@ import {buildLocalLearnerSupportGuide,isLearnerSupportProblemKind,readLocalLearn
 import {nativeOwn,nativePublicError} from './connection/native-login.mjs';
 import {createNativeHostContext,captureNativeHostConfiguration,readNativeHostConfiguration,openNativeHostOperation,readNativeHostOperation,assertNativeHostOperation,createNativeOperationVault,closeNativeHostOperation} from './connection/native-context.mjs';
 import { getPcStatus } from './system/pc-status.mjs';   // [내가 추가] 내 PC 상태 측정
+import { getPcSecurity } from './system/pc-security.mjs';   // [내가 추가] 내 PC 보안 구성 조회 (읽기 전용)
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(value);
@@ -692,6 +693,10 @@ export function createOnServer(serverOptions={}) {
       }
       if(req.method==='GET'&&url.pathname==='/api/system'){
         send(200,{ok:true,data:getPcStatus()});return;
+      }
+            // [내가 추가] 이 PC의 네트워크·방화벽·Windows 기록 건수를 읽기 전용으로 넘긴다
+      if(req.method==='GET'&&url.pathname==='/api/pc-security'){
+        send(200,{ok:true,data:getPcSecurity()});return;
       }
       if(req.method==='GET'&&url.pathname==='/api/diagnostics'){
         // 자동 호출이나 비밀 원문·전체 설정 출력 없이 로컬 연결 상태만 진단한다.
