@@ -349,16 +349,20 @@
     },
     renderStatus({ devices, sessions, notifications, diagnostics, mode } = {}) {
       const container = document.createElement('div');
-                  // [내가 추가] 2일차·3일차 영역을 따로 감싼다: 한쪽이 실패해도 다른 쪽과 기존 표시는 계속 보이게
-            // [내가 추가] 2일차·3일차 영역을 따로 감싼다: 한쪽이 실패해도 다른 쪽과 기존 표시는 계속 보이게
+      // [내가 추가] 핵심 기능 3가지를 먼저 보여 준다. 영역마다 따로 감싸서 한쪽이 실패해도 나머지는 보이게 한다.
       const showPanelError = (label, e) => {
         console.error(`[케셰브] ${label} 표시 오류`, e);
         const p = document.createElement('p');
-        p.textContent = `[${label}] 확인 불가 — 화면 표시 중 오류: ${e?.message || e}`;
+        p.textContent = `[${label}] 확인 불가 — 화면 표시 중 오류: ${e?.message || e} → student/extension.mjs 저장 후 서버 재시작, 브라우저 Ctrl + Shift + R`;
         container.append(p);
       };
-      try { container.append(buildPcStatusPanel({ devices, mode })); } catch (e) { showPanelError('내 PC 상태', e); }
-      try { container.append(buildPcSecurityPanel({ devices, mode })); } catch (e) { showPanelError('내 PC 보안 구성', e); }
+      try { container.append(buildCoreNav()); } catch (e) { showPanelError('핵심 기능 바로가기', e); }
+      try { container.append(buildPcStatusPanel({ devices, mode })); } catch (e) { showPanelError('① 내 PC 자원', e); }
+      try { container.append(buildPcSecurityPanel({ devices, mode })); } catch (e) { showPanelError('② 내 PC 보안 구성', e); }
+      try {
+        container.append(buildSectionHeading('kesev-core-3', '③ 연결·알림 상태',
+          '기존 서버·에이전트(SDP) 응답 기준입니다. PC 직접 조회 결과가 아니며, 위쪽 「다시 불러오기」로 갱신됩니다.'));
+      } catch (e) { showPanelError('③ 연결·알림 상태', e); }
       const addSectionTitle = (title) => {
         const h = document.createElement('p');
         h.textContent = title;
@@ -876,275 +880,336 @@
     }
   };
 }
-// [내가 추가] 관제 대시보드 상단 카드 4개 + 아래 추이 비교
-// innerHTML을 쓰지 않고 textContent만 쓴다 (서버 값이 화면 코드로 해석되지 않게)
-function buildPcStatusPanel({ devices, mode } = {}) {
-  const el = (tag, text, style = {}) => {
-    const n = document.createElement(tag);
-    if (text != null) n.textContent = text;
-    Object.assign(n.style, style);
-    return n;
-  };
-  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ko-KR') : '시각 없음');
-
-  const panel = el('div', null, { marginBottom: '14px' });
-  panel.append(el('p', '[내 PC 상태 — 이 PC에서 직접 잰 값]', { fontWeight: 'bold', marginTop: '10px' }));
-
-  const grid = el('div', null, { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '8px' });
-  const makeCard = (title) => {
-    const card = el('div', null, { border: '1px solid #8884', borderRadius: '8px', padding: '8px' });
-    const value = el('div', '측정값 불러오는 중', { fontSize: '1.2em', fontWeight: 'bold', margin: '4px 0' });
-    const note = el('div', '', { fontSize: '0.8em', opacity: '0.8' });
-    card.append(el('div', title, { fontSize: '0.85em' }), value, note);
-    grid.append(card);
-    return { value, note };
-  };
-  const cards = {
-    cpu: makeCard('CPU 사용률'),
-    memory: makeCard('메모리 사용량'),
-    disk: makeCard('디스크 남은 공간'),
-    engine: makeCard('엔진 연결'),
-  };
-  panel.append(grid);
-
-  const trend = el('div', null, { marginTop: '10px' });
-  panel.append(trend);
-
-  // 4번째 카드: 엔진 연결 상태 (측정값이 아니라 제공 코드가 준 연결 결과)
-  const dStatus = devices?.status;
-  if (dStatus === 'error') {
-    cards.engine.value.textContent = '연결 없음';
-    cards.engine.note.textContent = devices?.error?.code || devices?.error?.message || '이유 정보 없음';
-  } else if (dStatus === 'loading') {
-    cards.engine.value.textContent = '확인 중';
-  } else if (devices?.data) {
-    cards.engine.value.textContent = '연결됨';
-  } else {
-    cards.engine.value.textContent = '확인 불가';
-    cards.engine.note.textContent = '기기 응답이 없습니다';
-  }
-  if (mode === 'demo') cards.engine.note.textContent += ' · 예시 모드(실제 연결 아님)';
-
-  const show = (card, m, format) => {
-    if (!m) {
-      card.value.textContent = '확인 불가';
-      card.note.textContent = '첫 측정 중입니다. 다시 불러오기를 누르세요';
-      return;
-    }
-    if (m.status !== '실측') {
-      card.value.textContent = '확인 불가';
-      card.note.textContent = `${m.reason} · ${time(m.measuredAt)}`;
-      return;
-    }
-    card.value.textContent = format(m);
-    card.note.textContent = `실측 · ${time(m.measuredAt)}`;
-  };
-
-  const drawTrend = (history, startedAt) => {
-    trend.append(el('p', `[추이 비교] 서버 시작(${time(startedAt)}) 이후 측정분만 표시 · 최근 ${Math.min(history.length, 20)}개`, { fontWeight: 'bold' }));
-    if (history.length === 0) { trend.append(el('p', '아직 쌓인 측정값이 없습니다')); return; }
-    const diff = (key) => {
-      const vals = history.map((h) => h[key]).filter((v) => typeof v === 'number');
-      if (vals.length < 2) return '비교할 값 부족 (30초 뒤 다시 불러오기)';
-      const f = (n) => (n >= 0 ? '+' : '') + n.toFixed(1);
-      return `처음 대비 ${f(vals.at(-1) - vals[0])}%p · 직전 대비 ${f(vals.at(-1) - vals.at(-2))}%p`;
-    };
-    trend.append(el('p', `CPU: ${diff('cpu')}`), el('p', `메모리: ${diff('memory')}`));
-    for (const h of history.slice(-20)) {
-      const row = el('div', null, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8em' });
-      row.append(el('span', time(h.at), { width: '80px' }));
-      for (const [label, v, color] of [['CPU', h.cpu, '#7c5cff'], ['메모리', h.memory, '#3ecf8e']]) {
-        const box = el('span', null, { flex: '1', display: 'flex', alignItems: 'center', gap: '4px' });
-        if (typeof v === 'number') {
-          box.append(el('span', null, { width: `${Math.max(1, v)}%`, height: '8px', background: color, borderRadius: '4px' }));
-          box.append(el('span', `${label} ${v}%`));
-        } else {
-          box.append(el('span', `${label} 확인 불가`));
-        }
-        row.append(box);
-      }
-      trend.append(row);
-    }
-  };
-
-  fetch('/api/system', { cache: 'no-store' })
-    .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-    .then((body) => {
-      if (!body?.ok) throw new Error(body?.error?.code || '응답 형식이 예상과 다릅니다');
-      const s = body.data || {};
-      const l = s.latest || {};
-      show(cards.cpu, l.cpu, (m) => `${m.value} %`);
-      show(cards.memory, l.memory, (m) => `${m.value} / ${m.total} GB (${m.percent} %)`);
-      show(cards.disk, l.disk, (m) => `${m.value} GB 남음 (${m.drive})`);
-      drawTrend(s.history || [], s.serverStartedAt);
-    })
-    .catch((e) => {
-      for (const k of ['cpu', 'memory', 'disk']) {
-        cards[k].value.textContent = '확인 불가';
-        cards[k].note.textContent = `앱 서버의 /api/system 응답을 받지 못했습니다 (${e.message})`;
-      }
-      trend.append(el('p', '추이: 확인 불가 (측정값을 받지 못함)'));
-    });
-
-  return panel;
-}
-// [내가 추가] 3일차 · 내 PC 보안 구성 (네트워크 · 방화벽 · Windows 기록 · SDP 연결)
-// - PC 조회 값(실측/확인 불가)과 SDP 연결 상태는 출처가 다르므로 카드와 문구를 따로 둔다.
-// - Windows 기록 건수는 침해나 공격 탐지 결과가 아니다.
+// ============================================================================
+// [내가 추가] 4일차 · 내 학생 영역 다듬기 (제공 화면 파일은 고치지 않음)
+// - 핵심 기능 3가지를 먼저 보여 준다: ① 내 PC 자원 ② 내 PC 보안 구성 ③ 연결·알림 상태
+// - 내가 추가한 영역마다 「최근 측정값 다시 조회」 버튼과 대기 표시를 둔다.
+//   (서버는 30초/5분마다 스스로 잰다. 이 버튼은 '새로 재기'가 아니라 '가장 최근 측정값 다시 받기'다.)
+// - 조회에 실패하면 예시 값을 보여 주지 않고, 실패한 항목과 다음에 할 일을 보여 준다.
+// - 키보드만으로 쓸 수 있게 진짜 <button>과 제목 요소를 쓰고, 상태 변화는 aria-live로 알린다.
 // - innerHTML을 쓰지 않고 textContent만 쓴다.
+// ============================================================================
+
+const KESEV_TIMEOUT_MS = 10_000;
+
+function kesevEl(tag, text, style = {}, attrs = {}) {
+  const n = document.createElement(tag);
+  if (text != null) n.textContent = text;
+  Object.assign(n.style, style);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  return n;
+}
+const kesevTime = (iso) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString('ko-KR') : '시각 없음';
+};
+
+// 실패 이유를 보고 '다음에 할 일'을 정한다
+function kesevNextStep(reason = '') {
+  const r = String(reason);
+  if (/첫 (측정|조회) 중/.test(r)) return '서버가 막 켜져 첫 측정 중입니다. 몇 초 뒤 「최근 측정값 다시 조회」를 누르세요.';
+  if (/관리자 권한/.test(r)) return '관리자 권한이 필요한 항목입니다. 일반 권한에서는 확인 불가가 정상이며, 설정을 바꾸지 않습니다.';
+  if (/앱 서버에 연결하지 못함/.test(r)) return '서버 창에서 npm start가 실행 중인지 확인한 뒤 다시 조회하세요.';
+  if (/응답이 없음|초 안에/.test(r)) return '잠시 뒤 다시 조회하세요. 계속되면 서버 창의 오류 문구를 확인하세요.';
+  if (/PowerShell/.test(r)) return 'PowerShell이 실행되는지 확인하세요 (일반 PowerShell 창에서 Get-NetFirewallProfile 실행).';
+  if (/디스크|드라이브/.test(r)) return '드라이브가 연결되어 있는지 확인하세요.';
+  if (/ENGINE_NOT_CONNECTED|SDP 미연결|연결 없음/.test(r)) return '기존 서버·에이전트(SDP) 연결 어댑터를 확인하세요 (docs/SDP_HOST_CONNECTION.md).';
+  return '서버 창의 오류 문구를 확인한 뒤 다시 조회하세요.';
+}
+
+// 내 API를 부른다. 실패는 사람이 읽을 수 있는 이유로 바꿔서 던진다.
+async function kesevGetJson(path) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), KESEV_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(path, { cache: 'no-store', signal: ctrl.signal });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw new Error(`${KESEV_TIMEOUT_MS / 1000}초 안에 응답이 없음 (${path})`);
+    throw new Error(`앱 서버에 연결하지 못함 (${path})`);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) throw new Error(`앱 서버가 오류로 응답함: HTTP ${res.status} (${path})`);
+  let body;
+  try { body = await res.json(); } catch { throw new Error(`응답이 JSON 형식이 아님 (${path})`); }
+  if (!body?.ok) throw new Error(`응답 형식이 예상과 다름: ${body?.error?.code || '이유 정보 없음'} (${path})`);
+  return { data: body.data || {}, meta: body.meta || {} };
+}
+
+// 다시 조회 버튼 + 대기 표시 + 실패 안내가 붙은 영역 틀
+function kesevSection({ id, title, subtitle, load }) {
+  const section = kesevEl('section', null, { margin: '14px 0', padding: '10px', border: '1px solid #8883', borderRadius: '10px' },
+    { 'aria-labelledby': `${id}-title` });
+  const head = kesevEl('div', null, { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' });
+  const h = kesevEl('h3', title, { margin: '0', fontSize: '1.05em' }, { id: `${id}-title`, tabindex: '-1' });
+  const btn = kesevEl('button', '최근 측정값 다시 조회', { padding: '4px 10px', cursor: 'pointer' },
+    { type: 'button', 'aria-describedby': `${id}-status` });
+  const status = kesevEl('span', '', { fontSize: '0.85em' }, { id: `${id}-status`, role: 'status', 'aria-live': 'polite' });
+  head.append(h, btn, status);
+  section.append(head);
+  if (subtitle) section.append(kesevEl('p', subtitle, { fontSize: '0.8em', opacity: '0.75', margin: '4px 0 8px' }));
+  const body = kesevEl('div', null, {}, { 'aria-busy': 'false' });
+  section.append(body);
+  section.id = id;
+
+  const showFailures = (items) => {
+    if (!items.length) return;
+    const box = kesevEl('div', null, { marginTop: '10px', padding: '8px', border: '1px solid #d97706', borderRadius: '8px' },
+      { role: 'group', 'aria-label': '실패한 항목과 다음에 할 일' });
+    box.append(kesevEl('p', `실패한 항목 ${items.length}개 · 다음에 할 일`, { fontWeight: 'bold', margin: '0 0 4px' }));
+    const ul = kesevEl('ul', null, { margin: '0', paddingLeft: '18px', fontSize: '0.85em' });
+    for (const it of items) {
+      const li = kesevEl('li');
+      li.textContent = `${it.name}: ${it.reason} → ${kesevNextStep(it.reason)}`;
+      ul.append(li);
+    }
+    box.append(ul);
+    body.append(box);
+  };
+
+  const run = async () => {
+    const started = new Date();
+    btn.disabled = true;
+    btn.textContent = '조회 중…';
+    body.setAttribute('aria-busy', 'true');
+    body.style.opacity = '0.5';
+    status.textContent = `조회 중… (시작 ${started.toLocaleTimeString('ko-KR')})`;
+    try {
+      const failures = await load(body);           // load가 body를 다시 그리고, 실패 항목 목록을 돌려준다
+      showFailures(failures || []);
+      status.textContent = failures?.length
+        ? `조회 끝 · 일부 실패 ${failures.length}개 · ${new Date().toLocaleTimeString('ko-KR')}`
+        : `조회 완료 · ${new Date().toLocaleTimeString('ko-KR')} (값 옆 시각은 서버가 실제로 잰 시각)`;
+    } catch (e) {
+      body.replaceChildren();
+      showFailures([{ name: '이 영역 전체', reason: e?.message || String(e) }]);
+      status.textContent = `조회 실패 · ${new Date().toLocaleTimeString('ko-KR')}`;
+    } finally {
+      body.setAttribute('aria-busy', 'false');
+      body.style.opacity = '1';
+      btn.disabled = false;
+      btn.textContent = '최근 측정값 다시 조회';
+    }
+  };
+  btn.addEventListener('click', run);
+  run();
+  return section;
+}
+
+function kesevCard(grid, title, sourceLabel) {
+  const card = kesevEl('div', null, { border: '1px solid #8884', borderRadius: '8px', padding: '8px' },
+    { role: 'group', 'aria-label': title });
+  const value = kesevEl('div', '조회 중', { fontSize: '1.1em', fontWeight: 'bold', margin: '4px 0' });
+  const note = kesevEl('div', '', { fontSize: '0.8em', opacity: '0.85' });
+  card.append(kesevEl('div', title, { fontSize: '0.85em' }), value, note);
+  if (sourceLabel) card.append(kesevEl('div', sourceLabel, { fontSize: '0.75em', opacity: '0.6', marginTop: '4px' }));
+  grid.append(card);
+  return { value, note };
+}
+const kesevGrid = () => kesevEl('div', null, { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '8px' });
+
+// 핵심 기능 3가지 바로가기 (키보드: Tab으로 이동, Enter/Space로 해당 영역 제목에 초점)
+function buildCoreNav() {
+  const nav = kesevEl('nav', null, { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '6px 0 4px' }, { 'aria-label': '핵심 기능 3가지 바로가기' });
+  nav.append(kesevEl('span', '핵심 기능:', { fontWeight: 'bold', alignSelf: 'center' }));
+  for (const [id, label] of [['kesev-core-1', '① 내 PC 자원'], ['kesev-core-2', '② 내 PC 보안 구성'], ['kesev-core-3', '③ 연결·알림 상태']]) {
+    const b = kesevEl('button', label, { padding: '4px 10px', cursor: 'pointer' }, { type: 'button' });
+    b.addEventListener('click', () => {
+      const t = document.getElementById(`${id}-title`);
+      if (t) { t.scrollIntoView({ block: 'start', behavior: 'smooth' }); t.focus({ preventScroll: true }); }
+    });
+    nav.append(b);
+  }
+  return nav;
+}
+
+// ③ 연결·알림 상태 제목 (아래의 기존 표시를 묶는 제목만 붙인다. 내용은 기존 renderStatus 그대로)
+function buildSectionHeading(id, title, subtitle) {
+  const wrap = kesevEl('div', null, { marginTop: '14px' });
+  wrap.append(kesevEl('h3', title, { margin: '0', fontSize: '1.05em' }, { id: `${id}-title`, tabindex: '-1' }));
+  if (subtitle) wrap.append(kesevEl('p', subtitle, { fontSize: '0.8em', opacity: '0.75', margin: '4px 0' }));
+  return wrap;
+}
+
+// ① 내 PC 자원 (2일차 기능 다듬기: CPU · 메모리 · 디스크 · 측정 상태)
+function buildPcStatusPanel({ mode } = {}) {
+  return kesevSection({
+    id: 'kesev-core-1',
+    title: '① 내 PC 자원 — 이 PC에서 직접 잰 값',
+    subtitle: `서버가 30초마다 일반 권한으로 측정합니다. 값 옆 시각은 실제로 잰 시각입니다.${mode === 'demo' ? ' (예시 모드여도 이 영역은 실측 값입니다)' : ''}`,
+    load: async (body) => {
+      const { data: s } = await kesevGetJson('/api/system');
+      body.replaceChildren();
+      const failures = [];
+      const grid = kesevGrid();
+      const cards = {
+        cpu: kesevCard(grid, 'CPU 사용률', '출처: PC 직접 측정'),
+        memory: kesevCard(grid, '메모리 사용량', '출처: PC 직접 측정'),
+        disk: kesevCard(grid, '디스크 남은 공간', '출처: PC 직접 측정'),
+        meta: kesevCard(grid, '측정 상태', '출처: 앱 서버'),
+      };
+      body.append(grid);
+      const l = s.latest;
+      const show = (key, name, m, format) => {
+        if (!m) {
+          cards[key].value.textContent = '확인 불가';
+          cards[key].note.textContent = '첫 측정 중';
+          failures.push({ name, reason: '첫 측정 중' });
+        } else if (m.status !== '실측') {
+          cards[key].value.textContent = '확인 불가';
+          cards[key].note.textContent = `${m.reason} · ${kesevTime(m.measuredAt)}`;
+          failures.push({ name, reason: m.reason });
+        } else {
+          cards[key].value.textContent = format(m);
+          cards[key].note.textContent = `실측 · ${kesevTime(m.measuredAt)}`;
+        }
+      };
+      show('cpu', 'CPU 사용률', l?.cpu, (m) => `${m.value} %`);
+      show('memory', '메모리 사용량', l?.memory, (m) => `${m.value} / ${m.total} GB (${m.percent} %)`);
+      show('disk', '디스크 남은 공간', l?.disk, (m) => `${m.value} GB 남음 (${String(m.drive).replace(/\\$/, '')})`);
+      cards.meta.value.textContent = `${s.intervalSeconds || 30}초마다 측정`;
+      cards.meta.note.textContent = `서버 시작 ${kesevTime(s.serverStartedAt)} · 쌓인 측정 ${(s.history || []).length}개`;
+
+      // 추이
+      const history = s.history || [];
+      body.append(kesevEl('h4', `추이 비교 · 서버 시작 이후 최근 ${Math.min(history.length, 20)}개`, { margin: '10px 0 4px', fontSize: '0.95em' }));
+      if (history.length === 0) {
+        body.append(kesevEl('p', '아직 쌓인 측정값이 없습니다.'));
+      } else {
+        const diff = (key) => {
+          const vals = history.map((h) => h[key]).filter((v) => typeof v === 'number');
+          if (vals.length < 2) return '비교할 값 부족 (30초 뒤 다시 조회)';
+          const f = (n) => (n >= 0 ? '+' : '') + n.toFixed(1);
+          return `처음 대비 ${f(vals.at(-1) - vals[0])}%p · 직전 대비 ${f(vals.at(-1) - vals.at(-2))}%p`;
+        };
+        body.append(kesevEl('p', `CPU: ${diff('cpu')} / 메모리: ${diff('memory')}`, { margin: '0 0 4px', fontSize: '0.9em' }));
+        const list = kesevEl('ul', null, { listStyle: 'none', padding: '0', margin: '0' }, { 'aria-label': 'CPU·메모리 측정 기록' });
+        for (const h of history.slice(-20)) {
+          const li = kesevEl('li', null, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8em' });
+          li.append(kesevEl('span', kesevTime(h.at), { width: '80px' }));
+          for (const [label, v, color] of [['CPU', h.cpu, '#7c5cff'], ['메모리', h.memory, '#3ecf8e']]) {
+            const box = kesevEl('span', null, { flex: '1', display: 'flex', alignItems: 'center', gap: '4px' });
+            if (typeof v === 'number') {
+              box.append(kesevEl('span', null, { width: `${Math.max(1, v)}%`, height: '8px', background: color, borderRadius: '4px' }, { 'aria-hidden': 'true' }));
+              box.append(kesevEl('span', `${label} ${v}%`));
+            } else box.append(kesevEl('span', `${label} 확인 불가`));
+            li.append(box);
+          }
+          list.append(li);
+        }
+        body.append(list);
+      }
+      return failures;
+    },
+  });
+}
+
+// ② 내 PC 보안 구성 (3일차 기능 다듬기: 네트워크 · 방화벽 · Windows 기록 · SDP 연결)
 function buildPcSecurityPanel({ devices, mode } = {}) {
-  const el = (tag, text, style = {}) => {
-    const n = document.createElement(tag);
-    if (text != null) n.textContent = text;
-    Object.assign(n.style, style);
-    return n;
-  };
-  const time = (iso) => (iso ? new Date(iso).toLocaleTimeString('ko-KR') : '시각 없음');
   const NOTICE = '※ Windows 기록 건수는 침해나 공격 탐지 결과가 아닙니다. 프로그램·장치가 남긴 경고·오류의 개수입니다.';
+  return kesevSection({
+    id: 'kesev-core-2',
+    title: '② 내 PC 보안 구성 — 이 PC에서 직접 조회한 값 (읽기 전용)',
+    subtitle: '서버가 5분마다 일반 권한으로 조회합니다. 방화벽·보안 설정은 읽기만 하고 바꾸지 않습니다.',
+    load: async (body) => {
+      const { data: s, meta } = await kesevGetJson('/api/pc-security');
+      body.replaceChildren();
+      const failures = [];
+      const grid = kesevGrid();
+      const cards = {
+        network: kesevCard(grid, '네트워크 구성', '출처: PC 직접 조회'),
+        firewall: kesevCard(grid, '방화벽 설정', '출처: PC 직접 조회 · 읽기만'),
+        events: kesevCard(grid, 'Windows 기록 (최근 24시간)', '출처: PC 직접 조회 · 공격 탐지 아님'),
+        sdp: kesevCard(grid, 'SDP 연결', '출처: SDP 서버 응답 (PC 조회와 별개)'),
+      };
+      body.append(grid, kesevEl('p', NOTICE, { fontSize: '0.85em', margin: '6px 0' }));
 
-  const panel = el('div', null, { marginBottom: '14px' });
-  panel.append(el('p', '[내 PC 보안 구성 — 이 PC에서 직접 조회한 값 (읽기 전용)]', { fontWeight: 'bold', marginTop: '14px' }));
-
-  const grid = el('div', null, { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '8px' });
-  const makeCard = (title, sourceLabel) => {
-    const card = el('div', null, { border: '1px solid #8884', borderRadius: '8px', padding: '8px' });
-    const value = el('div', '조회 중', { fontSize: '1.1em', fontWeight: 'bold', margin: '4px 0' });
-    const note = el('div', '', { fontSize: '0.8em', opacity: '0.8' });
-    card.append(el('div', title, { fontSize: '0.85em' }), value, note, el('div', sourceLabel, { fontSize: '0.75em', opacity: '0.6', marginTop: '4px' }));
-    grid.append(card);
-    return { value, note };
-  };
-  const cards = {
-    network: makeCard('네트워크 구성', '출처: PC 직접 조회'),
-    firewall: makeCard('방화벽 설정', '출처: PC 직접 조회 · 읽기만'),
-    events: makeCard('Windows 기록 (최근 24시간)', '출처: PC 직접 조회 · 공격 탐지 아님'),
-    sdp: makeCard('SDP 연결', '출처: SDP 서버 응답 (PC 조회와 별개)'),
-  };
-  panel.append(grid);
-  panel.append(el('p', NOTICE, { fontSize: '0.85em', marginTop: '6px' }));
-
-  const trend = el('div', null, { marginTop: '10px' });
-  const records = el('div', null, { marginTop: '10px' });
-  panel.append(trend, records);
-
-  const setFail = (card, m) => {
-    card.value.textContent = '확인 불가';
-    card.note.textContent = `${m?.reason || '이유 정보 없음'} · ${time(m?.checkedAt)}`;
-  };
-
-  // SDP 연결 카드: PC 조회 성공 여부와 섞지 않는다
-  const showSdp = (serverMode) => {
-    if (devices?.status !== 'error' && devices?.data && mode !== 'demo') {
-      cards.sdp.value.textContent = 'SDP 연결됨';
-      cards.sdp.note.textContent = '기존 서버·에이전트 응답 확인';
-      return;
-    }
-    cards.sdp.value.textContent = 'SDP 미연결';
-    const code = devices?.error?.code || (serverMode === 'disconnected' ? 'ENGINE_NOT_CONNECTED' : '');
-    const why = serverMode === 'demo' || mode === 'demo' ? '예시 모드 (실제 연결 아님)' : code || '연결 응답 없음';
-    cards.sdp.note.textContent = why;
-  };
-
-  const fill = (s, serverMode) => {
-    const l = s.latest;
-    showSdp(serverMode);
-    if (!l) {
-      for (const k of ['network', 'firewall', 'events']) {
-        cards[k].value.textContent = '확인 불가';
-        cards[k].note.textContent = '첫 조회 중입니다. 몇 초 뒤 다시 불러오기를 누르세요';
+      // SDP: PC 조회와 섞지 않는다. 실패 목록에는 넣되 'PC 조회 실패'와 구분되는 이름을 쓴다.
+      if (devices?.status !== 'error' && devices?.data && mode !== 'demo') {
+        cards.sdp.value.textContent = 'SDP 연결됨';
+        cards.sdp.note.textContent = '기존 서버·에이전트 응답 확인';
+      } else {
+        cards.sdp.value.textContent = 'SDP 미연결';
+        const code = devices?.error?.code || (meta.mode === 'disconnected' ? 'ENGINE_NOT_CONNECTED' : '');
+        cards.sdp.note.textContent = meta.mode === 'demo' || mode === 'demo' ? '예시 모드 (실제 연결 아님)' : code || '연결 응답 없음';
+        failures.push({ name: 'SDP 연결 (서버 연결 상태, PC 조회 아님)', reason: `SDP 미연결 ${cards.sdp.note.textContent}` });
       }
-      return;
-    }
 
-    // 네트워크
-    const n = l.network;
-    if (n?.status === '실측') {
-      cards.network.value.textContent = `외부 어댑터 ${n.externalCount}개`;
-      cards.network.note.textContent = `IPv4 ${n.ipv4Count}개 · 실측 · ${time(n.checkedAt)}`;
-    } else setFail(cards.network, n);
-
-    // 방화벽
-    const f = l.firewall;
-    if (f?.status === '실측') {
-      cards.firewall.value.textContent = `켜짐 ${f.enabledCount} / ${f.profileCount}개 프로필`;
-      cards.firewall.note.textContent = `실측 · ${time(f.checkedAt)}`;
-    } else setFail(cards.firewall, f);
-
-    // Windows 기록 (System + Application만 합계, 하나라도 못 읽으면 합계를 만들지 않음)
-    const sys = l.events?.System;
-    const app = l.events?.Application;
-    if (sys?.status === '실측' && app?.status === '실측') {
-      cards.events.value.textContent = `오류 ${sys.error + app.error} · 경고 ${sys.warning + app.warning}`;
-      cards.events.note.textContent = `System + Application · 실측 · ${time(sys.checkedAt)}`;
-    } else {
-      const bad = [sys, app].find((x) => x?.status !== '실측');
-      setFail(cards.events, bad);
-    }
-
-    drawTrend(s.history || [], s.serverStartedAt, s.intervalSeconds);
-    drawRecords(l);
-  };
-
-  const drawTrend = (history, startedAt, interval) => {
-    trend.append(el('p', `[추이 비교] 서버 시작(${time(startedAt)}) 이후 ${Math.round((interval || 300) / 60)}분 간격 조회분 · 최근 ${Math.min(history.length, 12)}개`, { fontWeight: 'bold' }));
-    if (history.length === 0) { trend.append(el('p', '아직 쌓인 조회 결과가 없습니다')); return; }
-    const v = (x) => (typeof x === 'number' ? String(x) : '확인 불가');
-    const rows = history.slice(-12);
-    rows.forEach((h, i) => {
-      const prev = rows[i - 1];
-      const d = (key) => (prev && typeof h[key] === 'number' && typeof prev[key] === 'number'
-        ? ` (${h[key] - prev[key] >= 0 ? '+' : ''}${h[key] - prev[key]})` : '');
-      trend.append(el('div',
-        `${time(h.at)} · System 오류 ${v(h.systemError)}${d('systemError')} 경고 ${v(h.systemWarning)}${d('systemWarning')} · Application 오류 ${v(h.appError)}${d('appError')} 경고 ${v(h.appWarning)}${d('appWarning')}`,
-        { fontSize: '0.8em' }));
-    });
-    if (history.length < 2) trend.append(el('p', '비교할 조회 결과가 부족합니다 (5분 뒤 다시 불러오기)', { fontSize: '0.8em', opacity: '0.8' }));
-  };
-
-  const drawRecords = (l) => {
-    records.append(el('p', '[기록] 조회 상세', { fontWeight: 'bold' }));
-
-    records.append(el('p', '네트워크 어댑터', { fontWeight: 'bold', fontSize: '0.9em' }));
-    if (l.network?.status === '실측') {
-      for (const a of l.network.adapters) {
-        const addrs = a.addresses.map((x) => `${x.family} ${x.cidr}`).join(', ');
-        records.append(el('div', `${a.name}${a.internal ? ' (내부)' : ''} · MAC ${a.mac} · ${addrs}`, { fontSize: '0.8em' }));
+      const l = s.latest;
+      if (!l) {
+        for (const k of ['network', 'firewall', 'events']) {
+          cards[k].value.textContent = '확인 불가';
+          cards[k].note.textContent = '첫 조회 중';
+        }
+        failures.push({ name: '네트워크·방화벽·Windows 기록', reason: '첫 조회 중' });
+        return failures;
       }
-    } else records.append(el('div', `확인 불가 · ${l.network?.reason || ''}`, { fontSize: '0.8em' }));
+      const fail = (key, name, m) => {
+        cards[key].value.textContent = '확인 불가';
+        cards[key].note.textContent = `${m?.reason || '이유 정보 없음'} · ${kesevTime(m?.checkedAt)}`;
+        failures.push({ name, reason: m?.reason || '이유 정보 없음' });
+      };
 
-    records.append(el('p', '방화벽 프로필 (읽기만, 설정 변경 없음)', { fontWeight: 'bold', fontSize: '0.9em' }));
-    const act = (x) => (x === 'NotConfigured' ? '설정 안 됨(Windows 기본 동작)' : x === 'Block' ? '차단' : x === 'Allow' ? '허용' : x);
-    const on = (x) => (x === 'True' ? '켜짐' : x === 'False' ? '꺼짐' : '설정 안 됨');
-    if (l.firewall?.status === '실측') {
-      for (const p of l.firewall.profiles) {
-        records.append(el('div', `${p.name} · ${on(p.enabled)} · 들어오는 연결 기본: ${act(p.inbound)} · 나가는 연결 기본: ${act(p.outbound)}`, { fontSize: '0.8em' }));
+      const n = l.network;
+      if (n?.status === '실측') {
+        cards.network.value.textContent = `외부 어댑터 ${n.externalCount}개`;
+        cards.network.note.textContent = `IPv4 ${n.ipv4Count}개 · 실측 · ${kesevTime(n.checkedAt)}`;
+      } else fail('network', '네트워크 구성', n);
+
+      const f = l.firewall;
+      if (f?.status === '실측') {
+        cards.firewall.value.textContent = `켜짐 ${f.enabledCount} / ${f.profileCount}개 프로필`;
+        cards.firewall.note.textContent = `실측 · ${kesevTime(f.checkedAt)}`;
+      } else fail('firewall', '방화벽 설정', f);
+
+      const sys = l.events?.System;
+      const app = l.events?.Application;
+      if (sys?.status === '실측' && app?.status === '실측') {
+        cards.events.value.textContent = `오류 ${sys.error + app.error} · 경고 ${sys.warning + app.warning}`;
+        cards.events.note.textContent = `System + Application · 실측 · ${kesevTime(sys.checkedAt)}`;
+      } else fail('events', 'Windows 기록 (System·Application)', [sys, app].find((x) => x?.status !== '실측'));
+
+      // 추이
+      const history = s.history || [];
+      body.append(kesevEl('h4', `추이 비교 · ${Math.round((s.intervalSeconds || 300) / 60)}분 간격 · 최근 ${Math.min(history.length, 12)}개`, { margin: '10px 0 4px', fontSize: '0.95em' }));
+      const v = (x) => (typeof x === 'number' ? String(x) : '확인 불가');
+      const rows = history.slice(-12);
+      const tl = kesevEl('ul', null, { margin: '0', paddingLeft: '18px', fontSize: '0.8em' }, { 'aria-label': 'Windows 기록 건수 추이' });
+      rows.forEach((h, i) => {
+        const prev = rows[i - 1];
+        const d = (key) => (prev && typeof h[key] === 'number' && typeof prev[key] === 'number'
+          ? ` (${h[key] - prev[key] >= 0 ? '+' : ''}${h[key] - prev[key]})` : '');
+        tl.append(kesevEl('li', `${kesevTime(h.at)} · System 오류 ${v(h.systemError)}${d('systemError')} 경고 ${v(h.systemWarning)}${d('systemWarning')} · Application 오류 ${v(h.appError)}${d('appError')} 경고 ${v(h.appWarning)}${d('appWarning')}`));
+      });
+      body.append(tl);
+      if (history.length < 2) body.append(kesevEl('p', '비교할 조회 결과가 부족합니다 (5분 뒤 다시 조회).', { fontSize: '0.8em', opacity: '0.8' }));
+
+      // 기록 (펼치기: details/summary는 키보드 Enter/Space로 열고 닫힘)
+      const details = kesevEl('details', null, { marginTop: '8px' });
+      details.append(kesevEl('summary', '조회 상세 보기 (어댑터 · 방화벽 프로필 · 기록별 건수)', { cursor: 'pointer' }));
+      const add = (text, style = {}) => details.append(kesevEl('div', text, { fontSize: '0.8em', ...style }));
+      add('네트워크 어댑터', { fontWeight: 'bold', marginTop: '6px' });
+      if (n?.status === '실측') {
+        for (const a of n.adapters) add(`${a.name}${a.internal ? ' (내부)' : ''} · MAC ${a.mac} · ${a.addresses.map((x) => `${x.family} ${x.cidr}`).join(', ')}`);
+      } else add(`확인 불가 · ${n?.reason || ''}`);
+      add('방화벽 프로필 (읽기만, 설정 변경 없음)', { fontWeight: 'bold', marginTop: '6px' });
+      const act = (x) => (x === 'NotConfigured' ? '설정 안 됨(Windows 기본 동작)' : x === 'Block' ? '차단' : x === 'Allow' ? '허용' : x);
+      const on = (x) => (x === 'True' ? '켜짐' : x === 'False' ? '꺼짐' : '설정 안 됨');
+      if (f?.status === '실측') {
+        for (const p of f.profiles) add(`${p.name} · ${on(p.enabled)} · 들어오는 연결 기본: ${act(p.inbound)} · 나가는 연결 기본: ${act(p.outbound)}`);
+      } else add(`확인 불가 · ${f?.reason || ''}`);
+      add('Windows 기록 건수 (최근 24시간)', { fontWeight: 'bold', marginTop: '6px' });
+      add(NOTICE, { opacity: '0.8' });
+      for (const [name, x] of Object.entries(l.events || {})) {
+        if (x.status !== '실측') {
+          add(`${name} · 확인 불가 · ${x.reason}`);
+          if (x.adminOnly) failures.push({ name: `${name} 기록 (참고용)`, reason: x.reason });
+        } else if (x.adminOnly) add(`${name} · 읽기 가능 (${x.note})`);
+        else add(`${name} · 오류 ${x.error} · 경고 ${x.warning}${x.capped ? ' (5000건 이상, 일부만 셈)' : ''} · 실측 · ${kesevTime(x.checkedAt)}`);
       }
-    } else records.append(el('div', `확인 불가 · ${l.firewall?.reason || ''}`, { fontSize: '0.8em' }));
-
-    records.append(el('p', 'Windows 기록 건수 (최근 24시간)', { fontWeight: 'bold', fontSize: '0.9em' }));
-    records.append(el('div', NOTICE, { fontSize: '0.8em', opacity: '0.8' }));
-    for (const [name, x] of Object.entries(l.events || {})) {
-      let text;
-      if (x.status !== '실측') text = `${name} · 확인 불가 · ${x.reason}`;
-      else if (x.adminOnly) text = `${name} · 읽기 가능 (${x.note})`;
-      else text = `${name} · 오류 ${x.error} · 경고 ${x.warning}${x.capped ? ' (5000건 이상, 일부만 셈)' : ''} · 실측 · ${time(x.checkedAt)}`;
-      records.append(el('div', text, { fontSize: '0.8em' }));
-    }
-  };
-
-  fetch('/api/pc-security', { cache: 'no-store' })
-    .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-    .then((body) => {
-      if (!body?.ok) throw new Error(body?.error?.code || '응답 형식이 예상과 다릅니다');
-      fill(body.data || {}, body.meta?.mode);
-    })
-    .catch((e) => {
-      for (const k of ['network', 'firewall', 'events']) {
-        cards[k].value.textContent = '확인 불가';
-        cards[k].note.textContent = `앱 서버의 /api/pc-security 응답을 받지 못했습니다 (${e.message})`;
-      }
-      showSdp();
-    });
-
-  return panel;
+      body.append(details);
+      return failures;
+    },
+  });
 }
