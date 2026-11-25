@@ -80,7 +80,7 @@
 
 
 
-고치지 않은 파일: `on-client/README.md`(제공 안내, 시작 틀 업데이트 때 덮어써질 수 있음), `tools/\*.ps1`(제공 도구), `student/`·`src/` 코드.
+고치지 않은 파일: `on-client/README.md`(제공 안내, 시작 틀 업데이트 때 덮어써질 수 있음), `tools/*.ps1`(제공 도구), `student/`·`src/` 코드.
 
 
 
@@ -90,7 +90,7 @@
 
 ```powershell
 
-\# 기존 서버 창은 Ctrl + C로 끔
+# 기존 서버 창은 Ctrl + C로 끔
 
 cd $env:TEMP
 
